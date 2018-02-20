@@ -33,18 +33,21 @@ key/value with undef value are stripped from result
 =cut
 
 my %resc = (
-    "" => {},
-    "walltime=1,nodes=2,mem=2g" => {mem => '2048M', nodes => 2, walltime => 1},
+    "" => [{},[]],
+    "walltime=1,nodes=2,mem=2g" => [{mem => '2048M', nodes => 2, walltime => 1}, [qw(mem nodes walltime)]],
     );
 
 # TODO: fix bugs: 144 hours, single digit minutes/seconds?, ppn=123
 
 foreach my $resctxt (sort keys %resc) {
-    my $resc = parse_resource_list($resctxt);
+    my ($rsc, $mat) = parse_resource_list($resctxt);
+    # sort matches
+    $mat = [sort @$mat];
     # strip undefs
-    $resc = {map {$_ => $resc->{$_}} grep {defined $resc->{$_}} sort keys %$resc};
-    diag "resource '$resctxt' ", explain $resc;
-    is_deeply($resc, $resc{$resctxt}, "converted rescource list '$resctxt'");
+    $rsc = {map {$_ => $rsc->{$_}} grep {defined $rsc->{$_}} sort keys %$rsc};
+    diag "resource '$resctxt' ", explain $rsc, " matches ", $mat;
+    is_deeply($rsc, $resc{$resctxt}->[0], "converted rescource list '$resctxt'");
+    is_deeply($mat, $resc{$resctxt}->[1], "converted rescource list '$resctxt' matches");
 }
 
 done_testing;

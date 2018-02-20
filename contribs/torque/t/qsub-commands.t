@@ -27,6 +27,9 @@ my $dsa = "script arg1 -l something";
 
 my %comms = (
     "$dba $dsa", [@da],
+    # should be equal
+    "$dba -t1 --mem=1024M $dsa Y", [qw(-l mem=1g,walltime=1), @da, 'Y'],
+    "$dba -t1 --mem=1024M $dsa X", [qw(-l mem=1g -l walltime=1), @da, 'X'],
     );
 
 =head1 test all commands in %comms hash
