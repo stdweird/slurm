@@ -68,7 +68,7 @@ sub make_command
         $interactive,
         $hold,
         $join_output,
-        $resource_list,
+        @resource_list,
         $mail_options,
         $mail_user_list,
         $job_name,
@@ -99,7 +99,7 @@ sub make_command
         'I'        => \$interactive,
         'j:s'      => \$join_output,
         'J=s'      => \$array,
-        'l=s'      => \$resource_list,
+        'l=s'      => \@resource_list,
         'm=s'      => \$mail_options,
         'M=s'      => \$mail_user_list,
         'N=s'      => \$job_name,
@@ -181,11 +181,23 @@ sub make_command
         }
     }
 
-    if ($resource_list) {
-        %res_opts = %{parse_resource_list($resource_list)};
+    if (@resource_list) {
+        foreach my $rl (@resource_list) {
+            my ($opts, $matches) = parse_resource_list($rl);
+            # Loop over all values, how to determine that a value is not reset with default option?
+            if (!%res_opts) {
+                # nothing done yet, set all values, incl defaults/undef
+                %res_opts = %$opts;
+            } else {
+                # only set/update matches
+                foreach my $key (@$matches) {
+                    $res_opts{$key} = $opts->{$key};
+                }
+            }
+        }
 
-        if($res_opts{nodes}) {
-            %node_opts =  %{parse_node_opts($res_opts{nodes})};
+        if ($res_opts{nodes}) {
+            %node_opts = %{parse_node_opts($res_opts{nodes})};
         }
         if ($res_opts{select} && (!$node_opts{node_cnt} || ($res_opts{select} > $node_opts{node_cnt}))) {
             $node_opts{node_cnt} = $res_opts{select};
@@ -477,8 +489,10 @@ sub parse_resource_list
 
     $rl =~ s/:/,/g;
 
+    my @matches;
     foreach my $key (@keys) {
         ($opt{$key}) = $rl =~ m/$key=([\w:\+=+]+)/;
+        push(@matches, $key) if defined($opt{$key});
     }
 
     $opt{walltime} = $opt{h_rt} if ($opt{h_rt} && !$opt{walltime});
@@ -518,7 +532,7 @@ sub parse_resource_list
         $opt{file} = convert_mb_format($opt{file});
     }
 
-    return \%opt;
+    return \%opt, \@matches;
 }
 
 sub parse_node_opts
