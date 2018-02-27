@@ -35,9 +35,8 @@ key/value with undef value are stripped from result
 my %resc = (
     "" => [{},[]],
     "walltime=1,nodes=2,mem=2g" => [{mem => '2048M', nodes => 2, walltime => 1}, [qw(mem nodes walltime)]],
+    "walltime=100:5:5,nodes=123:ppn=123" => [{nodes => '123:ppn=123', walltime => 100*60+5+1}, [qw(nodes walltime)]],
     );
-
-# TODO: fix bugs: 144 hours, single digit minutes/seconds?, ppn=123
 
 foreach my $resctxt (sort keys %resc) {
     my ($rsc, $mat) = parse_resource_list($resctxt);
@@ -49,5 +48,23 @@ foreach my $resctxt (sort keys %resc) {
     is_deeply($rsc, $resc{$resctxt}->[0], "converted rescource list '$resctxt'");
     is_deeply($mat, $resc{$resctxt}->[1], "converted rescource list '$resctxt' matches");
 }
+
+=head1 parse_node_opts
+
+=cut
+
+# the part after nodes=
+my %nopts = (
+    "1" => {hostlist => undef, node_cnt => 1, task_cnt => 0},
+    "123:ppn=321" => {hostlist => undef, node_cnt => 123, task_cnt => 321},
+    "host1+host2:ppn=3" => {hostlist => undef, node_cnt => 0, task_cnt => 3}, # TODO: fix this
+    );
+
+foreach my $notxt (sort keys %nopts) {
+    my $nodes = parse_node_opts($notxt);
+    diag "resource '$notxt' ", explain $nodes;
+    is_deeply($nodes, $nopts{$notxt}, "converted node option '$notxt'");
+}
+
 
 done_testing;
