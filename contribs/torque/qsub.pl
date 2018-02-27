@@ -46,7 +46,7 @@ use warnings;
 use strict;
 
 use FindBin;
-use Getopt::Long 2.24 qw(:config no_ignore_case require_order);
+use Getopt::Long 2.24 qw(:config no_ignore_case permute);
 use lib "${FindBin::Bin}/../lib/perl";
 use autouse 'Pod::Usage' => qw(pod2usage);
 use Slurm ':all';
@@ -56,6 +56,15 @@ use File::Basename;
 
 use constant SBATCH => "${FindBin::Bin}/sbatch";
 use constant SALLOC => "${FindBin::Bin}/salloc";
+
+# Global debug flag
+my $debug;
+
+sub debug
+{
+    print join(" ", "DEBUG:", @_)
+        if $debug;
+}
 
 sub make_command
 {
@@ -119,6 +128,7 @@ sub make_command
         'help|?'   => \$help,
         'man'      => \$man,
         'sbatchline' => \$sbatchline,
+        'debug|D'      => \$debug,
         )
         or pod2usage(2);
 
@@ -337,7 +347,14 @@ sub make_command
     $command .= " --constraint='$res_opts{proc}'" if $res_opts{proc};
     $command .= " --dependency=$depend"   if $depend;
     $command .= " --tmp=$res_opts{file}"  if $res_opts{file};
-    $command .= " --mem=$res_opts{mem}"   if $res_opts{mem};
+
+    if ($res_opts{mem} && ! $res_opts{pmem}) {
+        $command .= " --mem=$res_opts{mem}";
+    } elsif ($res_opts{pmem} && ! $res_opts{mem}) {
+        $command .= " --mem-per-cpu=$res_opts{pmem}";
+    } elsif ($res_opts{pmem} && $res_opts{mem}) {
+        die "Both mem and pmem defined";
+    }
     $command .= " --nice=$res_opts{nice}" if $res_opts{nice};
 
     $command .= " --gres=gpu:$res_opts{naccelerators}"  if $res_opts{naccelerators};
@@ -383,6 +400,8 @@ sub make_command
     if ($sbatchline) {
         print "$command\n";
         exit;
+    } else {
+        debug("Generated", $interactive ? "interactive" : '', $block ? 'blocking' : '', "command '$command'");
     }
 
     return $interactive, $command, $block;
@@ -485,13 +504,14 @@ sub parse_resource_list
 
     # Protect the colons used to separate elements in walltime=hh:mm:ss.
     # Convert to NNhNNmNNs format.
-    $rl =~ s/(walltime|h_rt)=(\d{1,2}):(\d{2}):(\d{2})/$1=$2h$3m$4s/;
+    $rl =~ s/(walltime|h_rt)=(\d+):(\d{1,2}):(\d{1,2})/$1=$2h$3m$4s/;
 
-    $rl =~ s/:/,/g;
+    # TODO: why is this here? breaks e.g. :ppn=... structure
+    #$rl =~ s/:/,/g;
 
     my @matches;
     foreach my $key (@keys) {
-        ($opt{$key}) = $rl =~ m/$key=([\w:\+=+]+)/;
+        ($opt{$key}) = $rl =~ m/\b$key=([\w:.=+]+)/;
         push(@matches, $key) if defined($opt{$key});
     }
 
@@ -499,7 +519,7 @@ sub parse_resource_list
 
     # If needed, un-protect the walltime string.
     if ($opt{walltime}) {
-        $opt{walltime} =~ s/(\d{1,2})h(\d{2})m(\d{2})s/$1:$2:$3/;
+        $opt{walltime} =~ s/(\d+)h(\d{1,2})m(\d{1,2})s/$1:$2:$3/;
         # Convert to minutes for SLURM.
         $opt{walltime} = get_minutes($opt{walltime});
     }
@@ -518,6 +538,18 @@ sub parse_resource_list
         (!$opt{mppnppn} || ($opt{mpiprocs} > $opt{mppnppn}))) {
         $opt{mppnppn} = $opt{mpiprocs};
     }
+
+    if ($opt{vmem}) {
+        debug ("mem and vmem specified; forcing vmem value") if $opt{mem};
+        $opt{mem} = $opt{vmem};
+    }
+
+    if ($opt{pvmem}) {
+        debug ("pmem and pvmem specified; forcing pvmem value") if $opt{pmem};
+        $opt{pmem} = $opt{pvmem};
+    }
+
+    $opt{pmem} = convert_mb_format($opt{pmem}) if $opt{pmem};
 
     if ($opt{h_vmem}) {
         # Transfer over the GridEngine value (no conversion)
@@ -614,7 +646,7 @@ sub get_minutes
 sub convert_mb_format
 {
     my ($value) = @_;
-    my ($amount, $suffix) = $value =~ /(\d+)($|[KMGT])/i;
+    my ($amount, $suffix) = $value =~ /(\d+)($|[KMGT])b?/i;
     return if !$amount;
     $suffix = lc($suffix);
 
@@ -763,11 +795,15 @@ Specify the workdir of a job.  The default is the current work dir.
 
 =item B<-?> | B<--help>
 
-brief help message
+Brief help message
 
 =item B<--man>
 
-full documentation
+Full documentation
+
+=item B<-D> | B<--debug>
+
+Report some debug information, e.g. the actual SLURM command.
 
 =back
 

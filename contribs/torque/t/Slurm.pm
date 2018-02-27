@@ -13,5 +13,22 @@ our %EXPORT_TAGS = (
     all => \@EXPORT_OK,
     );
 
+
+package Slurm::Hostlist;
+
+use strict;
+use warnings;
+
+
+sub create {};
+
+sub push {};
+
+sub ranged_string {};
+
+sub count {0};
+
+
+
 1;
 
