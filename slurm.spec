@@ -1,7 +1,7 @@
 Name:		slurm
 Version:	17.11.3
-%global rel	2
-Release:	%{rel}%{?dist}
+%global rel	3
+Release:	%{rel}%{?dist}.ug
 Summary:	Slurm Workload Manager
 
 Group:		System Environment/Base
@@ -282,19 +282,20 @@ according to the Slurm
 
 %build
 %configure \
-	%{?_without_debug:--disable-debug} \
-	%{?_with_pam_dir} \
-	%{?_with_cpusetdir} \
-	%{?_with_mysql_config} \
-	%{?_with_ssl} \
-	%{?_with_cray:--enable-native-cray}\
-	%{?_with_cray_network:--enable-cray-network}\
-	%{?_with_multiple_slurmd:--enable-multiple-slurmd} \
-	%{?_with_pmix} \
-	%{?_with_freeipmi} \
-	%{?_with_hdf5} \
-	%{?_with_shared_libslurm} \
-	%{?_with_cflags}
+    %{?_without_debug:--disable-debug} \
+    %{?_with_pam_dir} \
+    %{?_with_cpusetdir} \
+    %{?_with_mysql_config} \
+    %{?_with_ssl} \
+    %{?_with_cray:--enable-native-cray}\
+    %{?_with_cray_network:--enable-cray-network}\
+    %{?_with_multiple_slurmd:--enable-multiple-slurmd} \
+    %{?_with_pmix} \
+    %{?_with_freeipmi} \
+    %{?_with_hdf5} \
+    %{?_with_shared_libslurm} \
+    %{?_with_cflags} \
+    %{?_with_lua}
 
 make %{?_smp_mflags}
 
@@ -451,6 +452,9 @@ rm -rf %{buildroot}
 %{_libdir}/*.so*
 %{_libdir}/slurm/src/*
 %{_libdir}/slurm/*.so
+%if %{with cray}
+%{_libdir}/slurmpmi/*
+%endif
 %exclude %{_libdir}/slurm/accounting_storage_mysql.so
 %exclude %{_libdir}/slurm/job_submit_pbs.so
 %exclude %{_libdir}/slurm/spank_pbs.so
