@@ -53,21 +53,80 @@ use Slurm ':all';
 use Switch;
 use English;
 use File::Basename;
+use Data::Dumper;
+# not in perl, but packaged in every OS
+use IPC::Run qw(run);
 
-use constant SBATCH => "${FindBin::Bin}/sbatch";
-use constant SALLOC => "${FindBin::Bin}/salloc";
+
+use constant SBATCH => "sbatch";
+use constant SALLOC => "salloc";
+
+use constant TORQUE_CFGS => qw(/var/spool/pbs/torque.cfg /var/spool/torque/torque.cfg);
+
+my $var_list_pattern = qr/(?:(?<=")[^"]*(?=(?:\s*"\s*,|\s*"\s*$)))|(?<=,)(?:[^",]*(?=(?:\s*,|\s*$)))|(?<=^)(?:[^",]+(?=(?:\s*,|\s*$)))|(?<=^)(?:[^",]*(?=(?:\s*,)))/;
 
 # Global debug flag
 my $debug;
 
+sub report_txt
+{
+    my $txt = join(" ", map {ref($_) eq '' ? $_ : Dumper($_)} @_);
+    $txt =~ s/\n+$//;
+    return "$txt\n";;
+}
+
 sub debug
 {
-    print join(" ", "DEBUG:", @_)
-        if $debug;
+    if ($debug) {
+        print "DEBUG: ".report_txt(@_);
+    }
+}
+
+sub fatal
+{
+    die(join("ERROR:".report_txt(@_)));
+}
+
+sub which
+{
+    my ($bin) = @_;
+
+    if ($bin !~ m{^/}) {
+        foreach my $path (split(":", $ENV{PATH} || '')) {
+            my $test = "$path/$bin";
+            if (-x $test) {
+                $bin = $test;
+                last;
+            }
+        }
+    }
+
+    return $bin;
+}
+
+sub find_submitfilter
+{
+    # look for torque.cfg in /var/spool/pbs or torque
+    my $sf;
+    foreach my $cfg (TORQUE_CFGS) {
+        next if ! -f $cfg;
+        # only check first match
+        open(my $fh, '<', $cfg)
+            or fatal("Could not open torque cfg file '$cfg' $!");
+
+        while (my $row = <$fh>) {
+            $sf = $1 if $row =~ m/^SUBMITFILTER\s+(\/.*?)\s*$/;
+        }
+        close $fh;
+        last;
+    }
+    debug($sf ? "Found submitfilter $sf" : "No submitfilter found");
+    return $sf;
 }
 
 sub make_command
 {
+    my ($sf) = @_;
     my (
         $start_time,
         $account,
@@ -96,7 +155,6 @@ sub make_command
         $resp,
         $man,
         );
-
 
     GetOptions(
         'a=s'      => \$start_time,
@@ -149,24 +207,23 @@ sub make_command
             # Untaint $0
             $0 = $1;
         } else {
-            die "Illegal characters were found in \$0 ($0)\n";
+            fatal("Illegal characters were found in \$0 ($0)");
         }
         pod2usage(-exitstatus => 0, -verbose => 2);
     }
 
     # Use sole remaining argument as jobIds
-    my $script;
+    my ($script, @script_args, $script_cmd);
     my $use_job_name = "sbatch";
 
     if ($ARGV[0]) {
-        $use_job_name = basename($ARGV[0]);
-        foreach (@ARGV) {
-            $script .= "$_ ";
-        }
-        chop($script);
+        $script = shift(@ARGV);
+        $use_job_name = basename($script);
+        @script_args = (@ARGV);
+        $script_cmd = join(" ", $script, @script_args);
     }
 
-    my $block = "false";
+    my $block = 0;
     my ($depend, $group_list, %res_opts, %node_opts);
 
     # remove PBS_NODEFILE environment as passed in to qsub.
@@ -186,7 +243,7 @@ sub make_command
             $group_list = $value;
         } elsif (lc($name) eq 'block') {
             if (defined $value) {
-                $block = $value;
+                $block = $value eq 'true' ? 1 : 0;
             }
         }
     }
@@ -231,10 +288,10 @@ sub make_command
         $res_opts{mppdepth} = $pe_opts{shm} if $pe_opts{shm};
     }
 
-    my $command;
+    my @command;
 
     if ($interactive) {
-        $command = SALLOC;
+        @command= (which(SALLOC));
 
         # Always want at least one node in the allocation
         if (!$node_opts{node_cnt}) {
@@ -251,37 +308,21 @@ sub make_command
             $node_opts{task_cnt} = 1;
         }
     } else {
-        if (!$script) {
-            pod2usage(2);
-        }
-
-        $command = SBATCH;
+        @command = (which(SBATCH));
 
         if (!$join_output) {
-            if ($err_path) {
-                $command .= " -e $err_path";
-            } else {
-                if ($job_name) {
-                    $command .= " -e $job_name.e%A";
-                } else {
-                    $command .= " -e $use_job_name.e%A";
-                }
-
-                $command .= ".%a" if $array;
+            if (!$err_path) {
+                $err_path = ($job_name ? "$job_name" : $use_job_name).".e%A";
+                $err_path .= ".%a" if $array;
             }
+            push(@command, "-e", $err_path);
         }
 
-        if ($out_path) {
-            $command .= " -o $out_path";
-        } else {
-            if ($job_name) {
-                $command .= " -o $job_name.o%A";
-            } else {
-                $command .= " -o $use_job_name.o%A";
-            }
-
-            $command .= ".%a" if $array;
+        if (!$out_path) {
+            $out_path = ($job_name ? "$job_name" : $use_job_name).".o%A";
+            $out_path .= ".%a" if $array;
         }
+        push(@command, "-o", $out_path);
 
         # The job size specification may be within the batch script,
         # Reset task count if node count also specified
@@ -290,27 +331,27 @@ sub make_command
         }
     }
 
-    $command .= " -N$node_opts{node_cnt}" if $node_opts{node_cnt};
-    $command .= " -n$node_opts{task_cnt}" if $node_opts{task_cnt};
-    $command .= " -w$node_opts{hostlist}" if $node_opts{hostlist};
+    push(@command, "-N$node_opts{node_cnt}") if $node_opts{node_cnt};
+    push(@command, "-n$node_opts{task_cnt}") if $node_opts{task_cnt};
+    push(@command, "-w$node_opts{hostlist}") if $node_opts{hostlist};
 
-    $command .= " -D$workdir" if $workdir;
+    push(@command, "-D$workdir") if $workdir;
 
-    $command .= " --mincpus=$res_opts{ncpus}"            if $res_opts{ncpus};
-    $command .= " --ntasks-per-node=$res_opts{mppnppn}"  if $res_opts{mppnppn};
+    push(@command, "--mincpus=$res_opts{ncpus}") if $res_opts{ncpus};
+    push(@command, "--ntasks-per-node=$res_opts{mppnppn}")  if $res_opts{mppnppn};
 
-    if($res_opts{walltime}) {
-        $command .= " -t$res_opts{walltime}";
-    } elsif($res_opts{cput}) {
-        $command .= " -t$res_opts{cput}";
+    if ($res_opts{walltime}) {
+        push(@command, "-t$res_opts{walltime}");
+    } elsif ($res_opts{cput}) {
+        push(@command, "-t$res_opts{cput}");
     } elsif($res_opts{pcput}) {
-        $command .= " -t$res_opts{pcput}";
+        push(@command, "-t$res_opts{pcput}");
     }
 
     if ($variable_list) {
         if ($interactive) {
             $variable_list =~ s/\'/\"/g;
-            my @parts = $variable_list =~ m/(?:(?<=")[^"]*(?=(?:\s*"\s*,|\s*"\s*$)))|(?<=,)(?:[^",]*(?=(?:\s*,|\s*$)))|(?<=^)(?:[^",]+(?=(?:\s*,|\s*$)))|(?<=^)(?:[^",]*(?=(?:\s*,)))/g;
+            my @parts = $variable_list =~ m/$var_list_pattern/g;
             foreach my $part (@parts) {
                 my ($key, $value) = $part =~ /(.*)=(.*)/;
                 if (defined($key) && defined($value)) {
@@ -318,144 +359,208 @@ sub make_command
                 }
             }
         } else {
-            if ($export_env) {
-                $command .= " --export=all";
-            } else {
-                $command .= " --export=none";
-            }
+            my @vars = ($export_env ? 'all' : 'none');
 
             # The logic below ignores quoted commas, but the quotes must be escaped
             # to be forwarded from the shell to Perl. For example:
             #        qsub -v foo=\"b,ar\" tmp
             $variable_list =~ s/\'/\"/g;
-            my @parts = $variable_list =~ m/(?:(?<=")[^"]*(?=(?:\s*"\s*,|\s*"\s*$)))|(?<=,)(?:[^",]*(?=(?:\s*,|\s*$)))|(?<=^)(?:[^",]+(?=(?:\s*,|\s*$)))|(?<=^)(?:[^",]*(?=(?:\s*,)))/g;
+            my @parts = $variable_list =~ m/$var_list_pattern/g;
+
             foreach my $part (@parts) {
                 my ($key, $value) = $part =~ /(.*)=(.*)/;
                 if (defined($key) && defined($value)) {
-                    $command .= ",$key=$value";
+                    push(@vars, "$key=$value");
                 } elsif (defined($ENV{$part})) {
-                    $command .= ",$part=$ENV{$part}";
+                    push(@vars, "$part=$ENV{$part}");
                 }
             }
+            push(@command, "--export=".join(',', @vars));
         }
     } elsif ($export_env && ! $interactive) {
-        $command .= " --export=all";
+        push(@command, "--export=all");
     }
 
-    $command .= " --account='$group_list'" if $group_list;
-    $command .= " --array='$array'" if $array;
-    $command .= " --constraint='$res_opts{proc}'" if $res_opts{proc};
-    $command .= " --dependency=$depend"   if $depend;
-    $command .= " --tmp=$res_opts{file}"  if $res_opts{file};
+    push(@command, "--account=$group_list") if $group_list;
+    push(@command, "--array=$array") if $array;
+    push(@command, "--constraint=$res_opts{proc}") if $res_opts{proc};
+    push(@command, "--dependency=$depend")   if $depend;
+    push(@command, "--tmp=$res_opts{file}")  if $res_opts{file};
 
     if ($res_opts{mem} && ! $res_opts{pmem}) {
-        $command .= " --mem=$res_opts{mem}";
+        push(@command, "--mem=$res_opts{mem}");
     } elsif ($res_opts{pmem} && ! $res_opts{mem}) {
-        $command .= " --mem-per-cpu=$res_opts{pmem}";
+        push(@command, "--mem-per-cpu=$res_opts{pmem}");
     } elsif ($res_opts{pmem} && $res_opts{mem}) {
-        die "Both mem and pmem defined";
+        fatal("Both mem and pmem defined");
     }
-    $command .= " --nice=$res_opts{nice}" if $res_opts{nice};
+    push(@command, "--nice=$res_opts{nice}") if $res_opts{nice};
 
-    $command .= " --gres=gpu:$res_opts{naccelerators}"  if $res_opts{naccelerators};
+    push(@command, "--gres=gpu:$res_opts{naccelerators}") if $res_opts{naccelerators};
 
     # Cray-specific options
-    $command .= " -n$res_opts{mppwidth}"            if $res_opts{mppwidth};
-    $command .= " -w$res_opts{mppnodes}"            if $res_opts{mppnodes};
-    $command .= " --cpus-per-task=$res_opts{mppdepth}"  if $res_opts{mppdepth};
+    push(@command, "-n$res_opts{mppwidth}") if $res_opts{mppwidth};
+    push(@command, "-w$res_opts{mppnodes}") if $res_opts{mppnodes};
+    push(@command, "--cpus-per-task=$res_opts{mppdepth}") if $res_opts{mppdepth};
 
-    $command .= " --begin=$start_time" if $start_time;
-    $command .= " --account=$account" if $account;
-    $command .= " -H" if $hold;
+    push(@command, "--begin=$start_time") if $start_time;
+    push(@command, "--account=$account") if $account;
+    push(@command, "-H") if $hold;
 
     if ($mail_options) {
-        $command .= " --mail-type=FAIL" if $mail_options =~ /a/;
-        $command .= " --mail-type=BEGIN" if $mail_options =~ /b/;
-        $command .= " --mail-type=END" if $mail_options =~ /e/;
-        $command .= " --mail-type=NONE" if $mail_options =~ /n/;
+        push(@command, "--mail-type=FAIL") if $mail_options =~ /a/;
+        push(@command, "--mail-type=BEGIN") if $mail_options =~ /b/;
+        push(@command, "--mail-type=END") if $mail_options =~ /e/;
+        push(@command, "--mail-type=NONE") if $mail_options =~ /n/;
     }
-    $command .= " --mail-user=$mail_user_list" if $mail_user_list;
-    $command .= " -J $job_name" if $job_name;
-    $command .= " --nice=$priority" if $priority;
-    $command .= " -p $destination" if $destination;
-    $command .= " --wckey=$wckey" if $wckey;
+    push(@command, "--mail-user=$mail_user_list") if $mail_user_list;
+    push(@command, "-J", $job_name) if $job_name;
+    push(@command, "--nice=$priority") if $priority;
+    push(@command, "-p", $destination) if $destination;
+    push(@command, "--wckey=$wckey") if $wckey;
 
     if ($requeue) {
         if ($requeue =~ 'y') {
-            $command .= " --requeue";
+            push(@command, "--requeue");
         } elsif ($requeue =~ 'n') {
-            $command .= " --no-requeue"
+            push(@command, "--no-requeue");
         }
     }
 
     if ($script) {
         if ($wrap && $wrap =~ 'y') {
-            $command .= " -J $use_job_name" if !$job_name;
-            $command .=" --wrap=\"$script\"";
+            if ($sf) {
+                fatal("Cannot wrap with submitfilter enabled");
+            } else {
+                push(@command, "-J", $use_job_name) if !$job_name;
+                push(@command, "--wrap=$script_cmd");
+            }
         } else {
-            $command .= " $script";
+            if (!$sf) {
+                push(@command, $script, @script_args);
+            }
         }
     }
 
+    my $command_txt = join(" ", @command);
     if ($sbatchline) {
-        print "$command\n";
+        # add script_cmd here, but this is not what we would really run
+        print $command_txt.($sf && $script ? " $script_cmd" : "")."\n";
         exit;
     } else {
-        debug("Generated", $interactive ? "interactive" : '', $block ? 'blocking' : '', "command '$command'");
+        debug("Generated", $interactive ? "interactive" : '', $block ? 'blocking' : '', "command '$command_txt'");
     }
 
-    return $interactive, $command, $block;
+    return $interactive, \@command, $block, $script, \@script_args;
+}
+
+sub run_submitfilter
+{
+    my ($sf, $script, $args) = @_;
+
+    my ($stdin, $stdout, $stderr);
+
+    # Read whole script, so we can do some preprocessing of our own?
+    my $fh;
+    if ($script) {
+        open($fh, '<', $script);
+    } else {
+        $fh = \*STDIN;
+    }
+    while (<$fh>) {
+        $stdin .= $_;
+    }
+    close($fh);
+
+    local $@;
+    eval {
+        run([$sf, @$args], \$stdin, \$stdout, \$stderr);
+    };
+
+    my $child_exit_status = $CHILD_ERROR >> 8;
+    if ($@) {
+        fatal("Something went wrong when calling submitfilter: $@");
+    }
+    print STDERR $stderr if $stderr;
+
+    if ($child_exit_status != 0) {
+        fatal("Submitfilter exited with non-zero $child_exit_status");
+    }
+
+    return $stdout;
 }
 
 sub main
 {
-    my ($interactive, $command, $block) = make_command();
+
+    # copy the arguments; ARGV is modified when getopt parses it
+    my @orig_args = (@ARGV);
+
+    my $sf = find_submitfilter;
+
+    my ($interactive, $command, $block, $script, $script_args) = make_command($sf);
 
     # Execute the command and capture its stdout, stderr, and exit status.
     # Note that if interactive mode was requested,
     # the standard output and standard error are _not_ captured.
     if ($interactive) {
-        my $ret = system($command);
+        # TODO: fix issues with space in options; also use IPC::Run
+        my $ret = system(join(" ", @$command));
         exit ($ret >> 8);
     } else {
-        # Capture stderr from the command to the stdout stream.
-        $command .= ' 2>&1';
 
-        # Execute the command and capture the combined stdout and stderr.
-        my @command_output = `$command 2>&1`;
+        my ($stdin, $stdout);
 
-        # Save the command exit status.
-        my $command_exit_status = $CHILD_ERROR;
+        if ($sf) {
+            $stdin = run_submitfilter($sf, $script, $script_args);
+        } elsif (!$script) {
+            # read from input
+            while (<STDIN>) {
+                $stdin .= $_;
+            }
 
-        my $job_id;
+            fatal ("No script and nothing from stdin") if !$stdin;
+        }
+
+        local $@;
+        eval {
+            # Execute the command and capture the combined stdout and stderr.
+            # TODO: why is this required?
+            run($command, \$stdin, '>&', \$stdout);
+        };
+        my $command_exit_status = $CHILD_ERROR >> 8;
+        if ($@) {
+            fatal("Something went wrong when calling sbatch: $@");
+        }
+
         # If available, extract the job ID from the command output and print
         # it to stdout, as done in the PBS version of qsub.
         if ($command_exit_status == 0) {
-            my @spcommand_output = split(" ", $command_output[$#command_output]);
-            $job_id = $spcommand_output[$#spcommand_output];
+            my ($job_id) = $stdout =~ m/(\S+)\s*$/;
+            debug("Got output $stdout");
             print "$job_id\n";
+
+            # If block is true wait for the job to finish
+            if ($block) {
+                my $slurm = Slurm::new();
+                if (!$slurm) {
+                    fatal("Problem loading slurm.");
+                }
+                sleep 2;
+                my ($job) = $slurm->load_job($job_id);
+                my $resp = $$job{'job_array'}[0]->{job_state};
+                while ( $resp < JOB_COMPLETE ) {
+                    $job = $slurm->load_job($job_id);
+                    $resp = $$job{'job_array'}[0]->{job_state};
+                    sleep 1;
+                }
+            }
         } else {
             print "There was an error running the SLURM sbatch command.\n" .
                   "The command was:\n'$command'\n" .
-                  "and the output was:\n'@command_output'\n";
+                  "and the output was:\n'$stdout'\n";
         }
 
-        # If block is true wait for the job to finish
-        my ($resp, $count);
-        my $slurm = Slurm::new();
-        if (!$slurm) {
-            die "Problem loading slurm.\n";
-        }
-        if ( (lc($block) eq "true" ) and ($command_exit_status == 0) ) {
-            sleep 2;
-            my ($job) = $slurm->load_job($job_id);
-            $resp = $$job{'job_array'}[0]->{job_state};
-            while ( $resp < JOB_COMPLETE ) {
-                $job = $slurm->load_job($job_id);
-                $resp = $$job{'job_array'}[0]->{job_state};
-                sleep 1;
-            }
-        }
 
         # Exit with the command return code.
         exit($command_exit_status >> 8);
@@ -637,7 +742,7 @@ sub get_minutes
         $minutes = int($duration / 60);
         $minutes++ if $mod;
     } else { # Unsupported format
-        die("Invalid time limit specified ($duration)\n");
+        fatal("Invalid time limit specified ($duration)");
     }
 
     return $minutes;
