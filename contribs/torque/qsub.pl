@@ -154,6 +154,7 @@ sub make_command
         $help,
         $resp,
         $man,
+        @pass
         );
 
     GetOptions(
@@ -187,6 +188,7 @@ sub make_command
         'man'      => \$man,
         'sbatchline' => \$sbatchline,
         'debug|D'      => \$debug,
+        'pass=s' => \@pass,
         )
         or pod2usage(2);
 
@@ -291,7 +293,7 @@ sub make_command
     my @command;
 
     if ($interactive) {
-        @command= (which(SALLOC));
+        @command = (which(SALLOC));
 
         # Always want at least one node in the allocation
         if (!$node_opts{node_cnt}) {
@@ -427,7 +429,11 @@ sub make_command
         }
     }
 
-    if ($script) {
+    push(@command, map {"--$_"} @pass);
+
+    if ($interactive) {
+        push(@command, which('srun'), '--pty', 'bash', '-i');
+    } elsif ($script) {
         if ($wrap && $wrap =~ 'y') {
             if ($sf) {
                 fatal("Cannot wrap with submitfilter enabled");
@@ -557,7 +563,7 @@ sub main
             }
         } else {
             print "There was an error running the SLURM sbatch command.\n" .
-                  "The command was:\n'$command'\n" .
+                  "The command was:\n'".join(" ", @$command)."'\n" .
                   "and the output was:\n'$stdout'\n";
         }
 
@@ -807,6 +813,8 @@ qsub  [-a start_time]
       [-wd workdir]
       [-W additional_attributes]
       [-h]
+      [--debug|-D]
+      [--pass]
       [script]
 
 =head1 DESCRIPTION
@@ -835,7 +843,7 @@ Specify a new path to receive the standard error output for the job.
 
 =item B<-I>
 
-Interactive execution.
+Interactive execution. Starts a bash session on the node.
 
 =item B<-J job_array>
 
@@ -909,6 +917,15 @@ Full documentation
 =item B<-D> | B<--debug>
 
 Report some debug information, e.g. the actual SLURM command.
+
+=item B<--pass>
+
+Passthrough for args to the C<sbatch>/C<salloc> command. One or more C<--pass>
+options form an long-option list, the leading C<--> are prefixed;
+e.g. C<--pass=constraint=alist> will add C<--constraint=alist>.
+
+Short optionnames are not supported. Combine multiple C<pass> options to pass
+multiple options; do not contruct one long command string.
 
 =back
 
