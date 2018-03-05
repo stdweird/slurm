@@ -293,7 +293,7 @@ sub make_command
     my @command;
 
     if ($interactive) {
-        @command= (which(SALLOC));
+        @command = (which(SALLOC));
 
         # Always want at least one node in the allocation
         if (!$node_opts{node_cnt}) {
@@ -431,7 +431,9 @@ sub make_command
 
     push(@command, map {"--$_"} @pass);
 
-    if ($script) {
+    if ($interactive) {
+        push(@command, which('srun'), '--pty', 'bash', '-i');
+    } elsif ($script) {
         if ($wrap && $wrap =~ 'y') {
             if ($sf) {
                 fatal("Cannot wrap with submitfilter enabled");
@@ -841,7 +843,7 @@ Specify a new path to receive the standard error output for the job.
 
 =item B<-I>
 
-Interactive execution.
+Interactive execution. Starts a bash session on the node.
 
 =item B<-J job_array>
 
