@@ -38,6 +38,7 @@ my %comms = (
     "$dba --mem=2048M $dsa", [qw(-l vmem=2gb), @da],
     "$dba --mem-per-cpu=10M $dsa", [qw(-l pvmem=10mb), @da],
     "$dba --mem-per-cpu=20M $dsa", [qw(-l pmem=20mb), @da],
+    "$dba --abc=123 --def=456 $dsa", [qw(--pass=abc=123 --pass=def=456), @da],
     );
 
 =head1 test all commands in %comms hash
@@ -52,7 +53,7 @@ foreach my $cmdtxt (sort keys %comms) {
     @ARGV = (@$arr);
     my ($interactive, $command, $block, $script, $script_args) = make_command();
     diag "interactive ", $interactive ? 1 : 0;
-    diag "command '$command'";
+    diag "command '".join(" ", @$command)."'";
     diag "block '$block'";
 
     is(join(" ", @$command), "$sbatch $cmdtxt", "expected command for '$cmdtxt'");
