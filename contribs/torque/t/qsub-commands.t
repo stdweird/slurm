@@ -4,15 +4,18 @@ use warnings;
 use Test::More;
 use Test::MockModule;
 
+my $submitfilter;
 BEGIN {
+    # poor mans main mocking
+    sub find_submitfilter {$submitfilter};
+
     unshift(@INC, '.', 't');
 }
 
 require 'qsub.pl';
 
-use FindBin;
-my $sbatch = "${FindBin::Bin}/sbatch";
-my $salloc = "${FindBin::Bin}/salloc";
+my $sbatch = which("sbatch");
+my $salloc = which("salloc");
 
 
 # TODO: mixed order (ie permute or no order); error on unknown options
@@ -47,12 +50,29 @@ foreach my $cmdtxt (sort keys %comms) {
     diag "cmdtxt '$cmdtxt'";
 
     @ARGV = (@$arr);
-    my ($interactive, $command, $block) = make_command();
+    my ($interactive, $command, $block, $script, $script_args) = make_command();
     diag "interactive ", $interactive ? 1 : 0;
     diag "command '$command'";
     diag "block '$block'";
 
-    is($command, "$sbatch $cmdtxt", "expected command for '$cmdtxt'");
+    is(join(" ", @$command), "$sbatch $cmdtxt", "expected command for '$cmdtxt'");
+    is($script, 'script', "expected script $script for '$cmdtxt'");
+    my @expargs = qw(arg1);
+    push(@expargs, $1) if $cmdtxt =~ m/(X|Y)$/;
+    is_deeply($script_args, \@expargs, "expected scriptargs ".join(" ", @$script_args)." for '$cmdtxt'");
 }
+
+=head1 test submitfilter
+
+=cut
+
+# set submitfilter
+$submitfilter = "/my/submitfilter";
+
+@ARGV = (@da);
+my ($interactive, $command, $block, $script, $script_args) = make_command($submitfilter);
+diag "submitfilter command $command";
+is(join(" ", @$command), "$sbatch $dba", "expected command for submitfilter");
+
 
 done_testing();
