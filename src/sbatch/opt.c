@@ -2613,7 +2613,7 @@ static void _parse_pbs_resource_list(char *rl)
 				 */
 				temp[end] = '\0';
 			}
-			opt.pn_min_memory = (int) str_to_mbytes(temp);
+			opt.pn_min_memory = (int) str_to_mbytes_pbs(temp);
 			if (opt.pn_min_memory < 0) {
 				error("invalid memory constraint %s", temp);
 				exit(error_exit);
@@ -2753,7 +2753,7 @@ static void _parse_pbs_resource_list(char *rl)
 				 */
 				temp[end] = '\0';
 			}
-			opt.mem_per_cpu = (int) str_to_mbytes(temp);
+			opt.mem_per_cpu = (int) str_to_mbytes_pbs(temp);
 			if (opt.mem_per_cpu < 0) {
 				error("invalid pmem memory per cpu constraint %s", temp);
 				exit(error_exit);
@@ -2785,7 +2785,7 @@ static void _parse_pbs_resource_list(char *rl)
 				 */
 				temp[end] = '\0';
 			}
-			opt.mem_per_cpu = (int) str_to_mbytes(temp);
+			opt.mem_per_cpu = (int) str_to_mbytes_pbs(temp);
 			if (opt.mem_per_cpu < 0) {
 				error("invalid pvmem memory per cpu constraint %s", temp);
 				exit(error_exit);
@@ -2822,7 +2822,7 @@ static void _parse_pbs_resource_list(char *rl)
 				 */
 				temp[end] = '\0';
 			}
-			opt.pn_min_memory = (int) str_to_mbytes(temp);
+			opt.pn_min_memory = (int) str_to_mbytes_pbs(temp);
 			if (opt.pn_min_memory < 0) {
 				error("invalid vmem memory constraint %s", temp);
 				exit(error_exit);
