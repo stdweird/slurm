@@ -1,7 +1,7 @@
 Name:		slurm
 Version:	17.11.3
 %global rel	3
-Release:	%{rel}%{?dist}.ug
+Release:    %{rel}%{gittag}%{?dist}.ug
 Summary:	Slurm Workload Manager
 
 Group:		System Environment/Base
@@ -15,7 +15,7 @@ URL:		https://slurm.schedmd.com/
 %global slurm_source_dir %{name}-%{version}-%{rel}
 %endif
 
-Source:		%{slurm_source_dir}.tar.bz2
+Source:		%{slurm_source_dir}.tar.gz
 
 # build options		.rpmmacros options	change to default action
 # ====================  ====================	========================
