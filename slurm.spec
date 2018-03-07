@@ -273,7 +273,6 @@ according to the Slurm
 
 %build
 %configure \
-<<<<<<< HEAD
     %{?_without_debug:--disable-debug} \
     %{?_with_pam_dir} \
     %{?_with_cpusetdir} \
@@ -288,22 +287,6 @@ according to the Slurm
     %{?_with_shared_libslurm} \
     %{?_with_cflags} \
     %{?_with_lua}
-=======
-	%{?_without_debug:--disable-debug} \
-	%{?_with_pam_dir} \
-	%{?_with_cpusetdir} \
-	%{?_with_mysql_config} \
-	%{?_with_ssl} \
-	%{?_with_cray:--enable-native-cray}\
-	%{?_with_cray_network:--enable-cray-network}\
-	%{?_with_multiple_slurmd:--enable-multiple-slurmd} \
-	%{?_with_pmix} \
-	%{?_with_freeipmi} \
-	%{?_with_hdf5} \
-	%{?_with_shared_libslurm} \
-	%{?_with_cflags}
-        %{?_with_lua}
->>>>>>> HPCUgent spec file
 
 make %{?_smp_mflags}
 
