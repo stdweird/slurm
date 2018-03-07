@@ -9,7 +9,7 @@ License:	GPLv2+
 URL:		https://slurm.schedmd.com/
 
 # when the rel number is one, the directory name does not include it
-%if "%{rel}" == "2"
+%if "%{rel}" == "1"
 %global slurm_source_dir %{name}-%{version}
 %else
 %global slurm_source_dir %{name}-%{version}-%{rel}
