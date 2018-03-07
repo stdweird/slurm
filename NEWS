@@ -1,6 +1,14 @@
 This file describes changes in recent versions of Slurm. It primarily
 documents those changes that are of interest to users and administrators.
 
+* Changes in Slurm 17.11.5
+==========================
+ -- Fix cloud nodes getting stuck in DOWN+POWER_UP+NO_RESPOND state after not
+    responding by ResumeTimeout.
+ -- Add job's array_task_cnt and user_name along with partitions
+    [max|def]_mem_per_[cpu|node], max_cpus_per_node, and max_share with the
+    SHARED_FORCE definition to the job_submit/lua plugin.
+
 * Changes in Slurm 17.11.4
 ==========================
  -- Add fatal_abort() function to be able to get core dumps if we hit an
@@ -52,6 +60,11 @@ documents those changes that are of interest to users and administrators.
     "#DW destroy_persistent" directives available in Cray CLE6.0UP06. This
     will be supported in Slurm version 18.08. Use "#BB" directives until then.
  -- Fix task/cgroup affinity to behave correctly.
+ -- FreeBSD - fix build on systems built with WITHOUT_KERBEROS.
+ -- Fix to restore pn_min_memory calculated result to correctly enforce
+    MaxMemPerCPU setting on a partition when the job uses --mem.
+ -- slurmdbd - prevent infinite loop if a QOS is set to preempt itself.
+ -- Fix issue with log rotation for slurmstepd processes.
 
 * Changes in Slurm 17.11.3-2
 ==========================
