@@ -277,6 +277,9 @@ sub make_command
                 $res_opts{mppdepth} = $cpus_per_task;
             }
         }
+        if ($node_opts{max_ppn} && ! $res_opts{mppnppn}) {
+            $res_opts{mppnppn} = $node_opts{max_ppn};
+        }
     }
 
     if (@pe_ev_opts) {
@@ -686,9 +689,13 @@ sub parse_node_opts
         'hostlist' => "",
         'task_cnt' => 0
         );
+    my $max_ppn;
     while ($node_string =~ /ppn=(\d+)/g) {
         $opt{task_cnt} += $1;
+        $max_ppn = $1 if !$max_ppn || ($1 > $max_ppn);
     }
+
+    $opt{max_ppn} = $max_ppn if defined $max_ppn;
 
     my $hl = Slurm::Hostlist::create("");
 

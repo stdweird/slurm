@@ -26,7 +26,7 @@ my $salloc = which("salloc");
 # default args
 my @da = qw(script arg1 -l nodes=2:ppn=4);
 # default batch argumnet string
-my $dba = "-e script.e%A -o script.o%A -N2 -n8";
+my $dba = "-e script.e%A -o script.o%A -N2 -n8 --ntasks-per-node=4";
 # default script args
 my $dsa = "script arg1";
 
