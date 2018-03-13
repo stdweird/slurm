@@ -56,7 +56,7 @@ use File::Basename;
 use Data::Dumper;
 # not in perl, but packaged in every OS
 use IPC::Run qw(run);
-
+use List::Util qw(first);
 
 use constant SBATCH => "sbatch";
 use constant SALLOC => "salloc";
@@ -70,7 +70,7 @@ my $debug;
 
 sub report_txt
 {
-    my $txt = join(" ", map {ref($_) eq '' ? $_ : Dumper($_)} @_);
+    my $txt = join(" ", map {ref($_) eq '' ? $_ : Dumper($_)} grep {defined($_)} @_);
     $txt =~ s/\n+$//;
     return "$txt\n";;
 }
@@ -317,14 +317,14 @@ sub make_command
 
         if (!$join_output) {
             if (!$err_path) {
-                $err_path = ($job_name ? "$job_name" : $use_job_name).".e%A";
+                $err_path = ($job_name ? "$job_name" : $use_job_name).".EDEFAULT%A";
                 $err_path .= ".%a" if $array;
             }
             push(@command, "-e", $err_path);
         }
 
         if (!$out_path) {
-            $out_path = ($job_name ? "$job_name" : $use_job_name).".o%A";
+            $out_path = ($job_name ? "$job_name" : $use_job_name).".ODEFAULT%A";
             $out_path .= ".%a" if $array;
         }
         push(@command, "-o", $out_path);
@@ -454,10 +454,10 @@ sub make_command
     my $command_txt = join(" ", @command);
     if ($sbatchline) {
         # add script_cmd here, but this is not what we would really run
+	$command_txt =~ s/ODEFAULT/o/;
+	$command_txt =~ s/EDEFAULT/e/;
         print $command_txt.($sf && $script ? " $script_cmd" : "")."\n";
         exit;
-    } else {
-        debug("Generated", $interactive ? "interactive" : '', $block ? 'blocking' : '', "command '$command_txt'");
     }
 
     return $interactive, \@command, $block, $script, \@script_args;
@@ -499,6 +499,39 @@ sub run_submitfilter
     return $stdout;
 }
 
+
+sub parse_script
+{
+    my ($txt, $command) = @_;
+
+    my @cmd = @$command;
+
+    # Look for PBS directives for -o and -e
+    # If they are set, remove the EDEFAULT / ODEFAULT commandline args
+    my %set;
+    foreach my $line (split("\n", $txt)) {
+        last if $line !~ m/^\s*(#|$)/;
+        # oset and eset on separate line, in case -e and -o are on same line,
+        # mixed with otehr opts etc etc
+        foreach my $opt (qw(e o)) {
+            my $pat = '^\s*#PBS.*?\s-'.$opt.'\s\S';
+            $set{$opt} = 1 if $line =~ m/$pat/;
+        }
+    }
+    foreach my $opt (qw(e o)) {
+        my $index = first { $cmd[$_] eq "-$opt" } 0 .. $#cmd;
+        next if ! $index;
+        if ($set{$opt}) {
+            @cmd = (@cmd[0..$index-1], @cmd[$index+2..$#cmd]);
+        } else {
+            my $pat = uc($opt).'DEFAULT';
+            $cmd[$index+1] =~ s/$pat/$opt/;
+        }
+    }
+
+    return \@cmd;
+}
+
 sub main
 {
 
@@ -514,6 +547,7 @@ sub main
     # the standard output and standard error are _not_ captured.
     if ($interactive) {
         # TODO: fix issues with space in options; also use IPC::Run
+        debug("Generated interactive", ($block ? ' blocking' : undef), " command '".join(" ", @$command)."'");
         my $ret = system(join(" ", @$command));
         exit ($ret >> 8);
     } else {
@@ -530,6 +564,9 @@ sub main
 
             fatal ("No script and nothing from stdin") if !$stdin;
         }
+
+        $command = parse_script($stdin, $command);
+        debug("Generated", ($block ? 'blocking' : undef), "command '".join(" ", @$command)."'");
 
         local $@;
         eval {

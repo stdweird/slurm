@@ -26,7 +26,7 @@ my $salloc = which("salloc");
 # default args
 my @da = qw(script arg1 -l nodes=2:ppn=4);
 # default batch argumnet string
-my $dba = "-e script.e%A -o script.o%A -N2 -n8 --ntasks-per-node=4";
+my $dba = "-e script.EDEFAULT%A -o script.ODEFAULT%A -N2 -n8 --ntasks-per-node=4";
 # default script args
 my $dsa = "script arg1";
 
@@ -73,7 +73,18 @@ $submitfilter = "/my/submitfilter";
 @ARGV = (@da);
 my ($interactive, $command, $block, $script, $script_args) = make_command($submitfilter);
 diag "submitfilter command $command";
-is(join(" ", @$command), "$sbatch $dba", "expected command for submitfilter");
+my $txt = "$sbatch $dba";
+is(join(" ", @$command), $txt, "expected command for submitfilter");
+
+# no match
+my $newcommand = parse_script("", $command);
+$txt =~ s/EDEFAULT/e/;
+$txt =~ s/ODEFAULT/o/;
+is(join(" ", @$newcommand), $txt, "expected command after parse_script without eo");
+
+# macthes
+$newcommand = parse_script("#\n#PBS -l abd -o stdout\n#\n#PBS -e abc\n\n", $command);
+is(join(" ", @$newcommand), "$sbatch -N2 -n8 --ntasks-per-node=4", "expected command after parse_script with eo");
 
 
 done_testing();
