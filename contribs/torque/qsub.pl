@@ -545,7 +545,7 @@ sub main
         # If available, extract the job ID from the command output and print
         # it to stdout, as done in the PBS version of qsub.
         if ($command_exit_status == 0) {
-            my ($job_id) = $stdout =~ m/(\S+)\s*$/;
+            my ($job_id) = $stdout =~ m/(\d+)(?:\s+on\s+cluster\s+.*?)?\s*$/;
             debug("Got output $stdout");
             print "$job_id\n";
 
