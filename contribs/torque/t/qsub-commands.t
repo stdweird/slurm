@@ -77,14 +77,16 @@ my $txt = "$sbatch $dba";
 is(join(" ", @$command), $txt, "expected command for submitfilter");
 
 # no match
-my $newcommand = parse_script("", $command);
+my ($newtxt, $newcommand) = parse_script("", $command);
 $txt =~ s/EDEFAULT/e/;
 $txt =~ s/ODEFAULT/o/;
 is(join(" ", @$newcommand), $txt, "expected command after parse_script without eo");
 
 # macthes
-$newcommand = parse_script("#\n#PBS -l abd -o stdout\n#\n#PBS -e abc\n\n", $command);
+my $stdin = "#\n#PBS -l abd -o stdout.\${PBS_JOBID}..\$PBS_JOBID\n#\n#PBS -e abc\ncmd\n";
+($newtxt, $newcommand) = parse_script($stdin, $command);
 is(join(" ", @$newcommand), "$sbatch -N2 -n8 --ntasks-per-node=4", "expected command after parse_script with eo");
-
+is($newtxt, "#\n#PBS -l abd -o stdout.%A..%A\n#\n#PBS -e abc\ncmd\n",
+   "PBS_JOBID replaced");
 
 done_testing();

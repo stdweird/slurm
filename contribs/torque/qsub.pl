@@ -505,6 +505,15 @@ sub parse_script
     my ($txt, $command) = @_;
 
     my @cmd = @$command;
+    my $newtxt;
+
+    # replace PBS_JOBID in -o / -e
+    # All script changes here
+    foreach my $line (split("\n", $txt)) {
+        $line =~ s/\$\{?PBS_JOBID\}?/%A/g if $line =~ m/^\s*#PBS.*?\s-[oe](\s|$)/;
+        $newtxt .= "$line\n";
+    };
+
 
     # Look for PBS directives for -o and -e
     # If they are set, remove the EDEFAULT / ODEFAULT commandline args
@@ -517,7 +526,7 @@ sub parse_script
             my $pat = '^\s*#PBS.*?\s-'.$opt.'\s\S';
             $set{$opt} = 1 if $line =~ m/$pat/;
         }
-    }
+    };
     foreach my $opt (qw(e o)) {
         my $index = first { $cmd[$_] eq "-$opt" } 0 .. $#cmd;
         next if ! $index;
@@ -527,9 +536,9 @@ sub parse_script
             my $pat = uc($opt).'DEFAULT';
             $cmd[$index+1] =~ s/$pat/$opt/;
         }
-    }
+    };
 
-    return \@cmd;
+    return ($newtxt, \@cmd);
 }
 
 sub main
@@ -565,7 +574,7 @@ sub main
             fatal ("No script and nothing from stdin") if !$stdin;
         }
 
-        $command = parse_script($stdin, $command);
+        ($stdin, $command) = parse_script($stdin, $command);
         debug("Generated", ($block ? 'blocking' : undef), "command '".join(" ", @$command)."'");
 
         local $@;
