@@ -72,7 +72,7 @@ sub report_txt
 {
     my $txt = join(" ", map {ref($_) eq '' ? $_ : Dumper($_)} grep {defined($_)} @_);
     $txt =~ s/\n+$//;
-    return "$txt\n";;
+    return "$txt\n";
 }
 
 sub debug
