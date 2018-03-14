@@ -216,13 +216,14 @@ sub make_command
 
     # Use sole remaining argument as jobIds
     my ($script, @script_args, $script_cmd);
-    my $use_job_name = "sbatch";
 
     if ($ARGV[0]) {
         $script = shift(@ARGV);
-        $use_job_name = basename($script);
+        $job_name = basename($script) . 'JDEFAULT' if ! $job_name;
         @script_args = (@ARGV);
         $script_cmd = join(" ", $script, @script_args);
+    } else {
+        $job_name = "sbatchJDEFAULT" if ! $job_name;
     }
 
     my $block = 0;
@@ -317,15 +318,17 @@ sub make_command
 
         if (!$join_output) {
             if (!$err_path) {
-                $err_path = ($job_name ? "$job_name" : $use_job_name).".EDEFAULT%A";
+                $err_path = "$job_name.eEDEFAULT%A";
                 $err_path .= ".%a" if $array;
+                $err_path =~ s/JDEFAULT//;
             }
             push(@command, "-e", $err_path);
         }
 
         if (!$out_path) {
-            $out_path = ($job_name ? "$job_name" : $use_job_name).".ODEFAULT%A";
+            $out_path = "$job_name.oODEFAULT%A";
             $out_path .= ".%a" if $array;
+            $out_path =~ s/JDEFAULT//;
         }
         push(@command, "-o", $out_path);
 
@@ -335,6 +338,9 @@ sub make_command
             $node_opts{task_cnt} *= $node_opts{node_cnt};
         }
     }
+
+    # job_name is always passed, because sbatch calls happen with stdin redirected
+    push(@command, "-J", $job_name) if $job_name;
 
     push(@command, "-N$node_opts{node_cnt}") if $node_opts{node_cnt};
     push(@command, "-n$node_opts{task_cnt}") if $node_opts{task_cnt};
@@ -419,7 +425,6 @@ sub make_command
         push(@command, "--mail-type=NONE") if $mail_options =~ /n/;
     }
     push(@command, "--mail-user=$mail_user_list") if $mail_user_list;
-    push(@command, "-J", $job_name) if $job_name;
     push(@command, "--nice=$priority") if $priority;
     push(@command, "-p", $destination) if $destination;
     push(@command, "--wckey=$wckey") if $wckey;
@@ -441,7 +446,6 @@ sub make_command
             if ($sf) {
                 fatal("Cannot wrap with submitfilter enabled");
             } else {
-                push(@command, "-J", $use_job_name) if !$job_name;
                 push(@command, "--wrap=$script_cmd");
             }
         } else {
@@ -454,8 +458,7 @@ sub make_command
     my $command_txt = join(" ", @command);
     if ($sbatchline) {
         # add script_cmd here, but this is not what we would really run
-	$command_txt =~ s/ODEFAULT/o/;
-	$command_txt =~ s/EDEFAULT/e/;
+        $command_txt =~ s/[OEJ]DEFAULT//g;
         print $command_txt.($sf && $script ? " $script_cmd" : "")."\n";
         exit;
     }
@@ -517,24 +520,31 @@ sub parse_script
 
     # Look for PBS directives for -o and -e
     # If they are set, remove the EDEFAULT / ODEFAULT commandline args
+    # keys are slurm option names
+    my %map = (
+        N => 'J',
+        );
     my %set;
     foreach my $line (split("\n", $txt)) {
         last if $line !~ m/^\s*(#|$)/;
         # oset and eset on separate line, in case -e and -o are on same line,
         # mixed with otehr opts etc etc
-        foreach my $opt (qw(e o)) {
-            my $pat = '^\s*#PBS.*?\s-'.$opt.'\s\S';
+        foreach my $pbsopt (qw(e o N)) {
+            my $opt = $map{$pbsopt} || $pbsopt;
+            my $pat = '^\s*#PBS.*?\s-'.$pbsopt.'\s\S';
             $set{$opt} = 1 if $line =~ m/$pat/;
         }
     };
-    foreach my $opt (qw(e o)) {
+
+    # slurm short options
+    foreach my $opt (qw(e o J)) {
         my $index = first { $cmd[$_] eq "-$opt" } 0 .. $#cmd;
         next if ! $index;
         if ($set{$opt}) {
             @cmd = (@cmd[0..$index-1], @cmd[$index+2..$#cmd]);
         } else {
             my $pat = uc($opt).'DEFAULT';
-            $cmd[$index+1] =~ s/$pat/$opt/;
+            $cmd[$index+1] =~ s/$pat//;
         }
     };
 
@@ -556,8 +566,10 @@ sub main
     # the standard output and standard error are _not_ captured.
     if ($interactive) {
         # TODO: fix issues with space in options; also use IPC::Run
-        debug("Generated interactive", ($block ? ' blocking' : undef), " command '".join(" ", @$command)."'");
-        my $ret = system(join(" ", @$command));
+        my $command_txt = join(" ", @$command);
+        $command_txt =~ s/[OEJ]DEFAULT//g;
+        debug("Generated interactive", ($block ? ' blocking' : undef), " command '$command_txt'");
+        my $ret = system($command_txt);
         exit ($ret >> 8);
     } else {
 

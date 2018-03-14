@@ -25,8 +25,8 @@ my $salloc = which("salloc");
 
 # default args
 my @da = qw(script arg1 -l nodes=2:ppn=4);
-# default batch argumnet string
-my $dba = "-e script.EDEFAULT%A -o script.ODEFAULT%A -N2 -n8 --ntasks-per-node=4";
+# default batch argument string
+my $dba = "-e script.eEDEFAULT%A -o script.oODEFAULT%A -J scriptJDEFAULT -N2 -n8 --ntasks-per-node=4";
 # default script args
 my $dsa = "script arg1";
 
@@ -78,15 +78,15 @@ is(join(" ", @$command), $txt, "expected command for submitfilter");
 
 # no match
 my ($newtxt, $newcommand) = parse_script("", $command);
-$txt =~ s/EDEFAULT/e/;
-$txt =~ s/ODEFAULT/o/;
+$txt =~ s/[EOJ]DEFAULT//g;
 is(join(" ", @$newcommand), $txt, "expected command after parse_script without eo");
 
-# macthes
-my $stdin = "#\n#PBS -l abd -o stdout.\${PBS_JOBID}..\$PBS_JOBID\n#\n#PBS -e abc\ncmd\n";
+# replace PBS_JOBID
+# no -o/e/J
+my $stdin = "#\n#PBS -l abd -o stdout.\${PBS_JOBID}..\$PBS_JOBID\n#\n#PBS -e abc -N def\ncmd\n";
 ($newtxt, $newcommand) = parse_script($stdin, $command);
 is(join(" ", @$newcommand), "$sbatch -N2 -n8 --ntasks-per-node=4", "expected command after parse_script with eo");
-is($newtxt, "#\n#PBS -l abd -o stdout.%A..%A\n#\n#PBS -e abc\ncmd\n",
+is($newtxt, "#\n#PBS -l abd -o stdout.%A..%A\n#\n#PBS -e abc -N def\ncmd\n",
    "PBS_JOBID replaced");
 
 done_testing();
