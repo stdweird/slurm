@@ -62,7 +62,7 @@ sub main
         $giga,             $help,            $idle,         $mega,
         $man,              $nodes,           $one,          $queueList,
         $queueStatus,      $running,         $serverStatus, $siteSpecific,
-        $userList,         $header_printed
+        $userList,         $header_printed,  $array
         );
 
     GetOptions(
@@ -80,6 +80,7 @@ sub main
         'r'      => \$running,
         'R'      => \$diskReservation,
         'q'      => \$queueStatus,
+        't'      => \$array,
         'Q:s'    => \$queueList,
         'u=s'    => \$userList,
         'W=s'    => \$siteSpecific,
@@ -173,6 +174,15 @@ sub main
 
         my $line = 0;
         foreach my $job (@{$resp->{job_array}}) {
+            $job->{is_array} = $job->{array_job_id} &&
+                ($job->{array_task_id} != INFINITE ||
+                 $job->{array_task_str});
+            # When not in array mode, skip all child array jobs
+            next if
+                $job->{is_array} &&
+                $job->{array_job_id} != $job->{job_id} &&
+                !$array;
+
             my $use_time = $now_time;
             my $state = $job->{job_state};
             if ($job->{end_time} && $job->{end_time} < $now_time) {
@@ -185,6 +195,16 @@ sub main
             $job->{stateCode} = stateCode($job->{job_state});
             $job->{user_name} = getpwuid($job->{user_id}) || "nobody";
             $job->{name} = "Allocation" if !$job->{name};
+
+            if ($job->{is_array}) {
+                # the main/parent job when not running
+                $job->{job_id_full} = $job->{array_job_id} .
+                    (($job->{array_task_id} != INFINITE)  ? "[$job->{array_task_id}]" : "[]");
+                $job->{job_id_short} = $array ? $job->{job_id_full} : $job->{array_job_id} . "[]";
+            } else {
+                $job->{job_id_short} = $job->{job_id};
+                $job->{job_id_full} = $job->{job_id};
+            }
 
             # Filter jobs according to options and arguments
             if (@jobIds) {
@@ -322,6 +342,7 @@ sub ddhhmm
     if ($hhmmss == INFINITE) {
         return "Infinite";
     }
+
     # Convert hhmmss to duration in minutes
     $hhmmss =~ /(?:(\d+):)?(?:(\d+):)?([\d\.]+)/;
     my ($hh, $mm, $ss) = ($1 || 0, $2 || 0, $3 || 0);
@@ -363,7 +384,7 @@ sub ddhhmmss
     if ($hh > 24) {
         my $days = int($hh / 24);
         $hh = $hh % 24;
-        sprintf('%02d:%02d:%02d:%02d', $days, $hh, $mm, $ss);
+        $ddhhmmss = sprintf('%02d:%02d:%02d:%02d', $days, $hh, $mm, $ss);
     }
     return $ddhhmmss;
 }
@@ -455,12 +476,12 @@ sub print_job_brief
     my ($job, $line_num) = @_;
 
     if(!$line_num) {
-        printf("%-19s %-16s %-15s %-8s %-1s %-15s\n",
+        printf("%-19s %-16s %-15s %-11s %-1s %-15s\n",
                "Job id", "Name", "Username", "Time Use",  "S", "Queue");
-        printf("%-19s %-16s %-15s %-8s %-1s %-15s\n",
+        printf("%-19s %-16s %-15s %-11s %-1s %-15s\n",
                '-' x 19, '-' x 16, '-' x 15, '-' x 8, '-' x 1, '-' x 15);
     }
-    printf("%-19.19s %-16.16s %-15.15s %-8.8s %-1.1s %-15.15s\n",
+    printf("%-19.19s %-16.16s %-15.15s %-11.11s %-1.1s %-15.15s\n",
            $job->{job_id_short},
            $job->{name}, $job->{user_name},
            ddhhmmss($job->{statPSUtl}), $job->{stateCode},
@@ -479,25 +500,25 @@ sub print_job_select
         chomp $hostname;
         print "\n${hostname}:\n";
 
-        printf("%-20s %-8s %-8s %-20s %-6s %-5s %-5s %-6s %-5s %-1s %-5s\n",
+        printf("%-20s %-8s %-8s %-20s %-6s %-5s %-5s %-6s %-8s %-1s %-8s\n",
                "", "", "", "", "", "", "", "Req'd", "Req'd", "", "Elap");
         printf(
-            "%-20s %-8s %-8s %-20s %-6s %-5s %-5s %-6s %-5s %-1s %-5s\n",
+            "%-20s %-8s %-8s %-20s %-6s %-5s %-5s %-6s %-8s %-1s %-8s\n",
             "Job id", "Username", "Queue", "Name", "SessID", "NDS",
             "TSK",    "Memory",   "Time Use",  "S",       "Time"
             );
         printf(
-            "%-20s %-8s %-8s %-20s %-6s %-5s %-5s %-6s %-5s %-1s %-5s\n",
+            "%-20s %-8s %-8s %-20s %-6s %-5s %-5s %-6s %-8s %-1s %-8s\n",
             '-' x 20, '-' x 8, '-' x 8, '-' x 20, '-' x 6, '-' x 5,
-            '-' x 5,  '-' x 6, '-' x 5, '-',      '-' x 5
+            '-' x 5,  '-' x 6, '-' x 8, '-',      '-' x 8
             );
         $header_printed = 1;
     }
     $execHost = get_exec_host($job) if $nodes;
 
     printf("%-20.20s %-8.8s %-8.8s %-20.20s " .
-           "%-6.6s %5.5s %5.5s %6.6s %-5.5s %-1s %-5.5s",
-           $job->{job_id} . ($job->{array_task_str} ? "[]" : ""),
+           "%-6.6s %5.5s %5.5s %6.6s %-8.8s %-1s %-8.8s",
+           $job->{job_id_short},
            $job->{user_name},
            $job->{partition},
            $job->{name},
@@ -525,8 +546,8 @@ sub print_job_full
 {
     my ($job) = @_;
     # Print the job attributes
-    printf("Job Id:\t%s%s\n", $job->{job_id},
-           $job->{array_task_str} ? "[$job->{array_task_str}]" : "");
+    printf("Job Id:\t%s\n", $job->{job_id_full});
+    printf("\tSlurm Id = %s\n", $job->{job_id}) if $job->{is_array};
     printf("\tJob_Name = %s\n", $job->{name}) if $job->{name};
     printf("\tJob_Owner = %s@%s\n",
            $job->{user_name}, $job->{alloc_node});
@@ -682,6 +703,10 @@ Displays all jobs in a single-line format. See the STANDARD OUTPUT section for f
 =item B<-i>
 
 Displays information about idle jobs. This includes jobs which are queued or held.
+
+=item B<-t>
+
+Displays information about array child jobs. By default only parent array job is shown.
 
 =item B<-f>
 
