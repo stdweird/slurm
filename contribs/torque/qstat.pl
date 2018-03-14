@@ -341,6 +341,34 @@ sub ddhhmm
 }
 
 ################################################################################
+# $ddhhmmss = ddhhmmss($hhmmss)
+# Converts a duration in hhmmss to ddhhmmss
+################################################################################
+sub ddhhmmss
+{
+    my ($hhmmss) = @_;
+
+    $hhmmss = 0 unless $hhmmss;
+    if ($hhmmss == INFINITE) {
+        return "Infinite";
+    }
+    $hhmmss = hhmmss($hhmmss);
+
+    # Convert hhmmss to duration in minutes
+    $hhmmss =~ /(?:(\d+):)?(?:(\d+):)?([\d\.]+)/;
+    my ($hh, $mm, $ss) = ($1 || 0, $2 || 0, $3 || 0);
+
+    # Convert hours in days
+    my $ddhhmmss = $hhmmss;
+    if ($hh > 24) {
+        my $days = int($hh / 24);
+        $hh = $hh % 24;
+        sprintf('%02d:%02d:%02d:%02d', $days, $hh, $mm, $ss);
+    }
+    return $ddhhmmss;
+}
+
+################################################################################
 # $humanReadableTime = hRTime($epochTime)
 # Converts an epoch time into a human readable time
 ################################################################################
@@ -433,9 +461,9 @@ sub print_job_brief
                '-' x 19, '-' x 16, '-' x 15, '-' x 8, '-' x 1, '-' x 15);
     }
     printf("%-19.19s %-16.16s %-15.15s %-8.8s %-1.1s %-15.15s\n",
-           $job->{job_id} . ($job->{array_task_str} ? "[]" : ""),
+           $job->{job_id_short},
            $job->{name}, $job->{user_name},
-           ddhhmm($job->{statPSUtl}), $job->{stateCode},
+           ddhhmmss($job->{statPSUtl}), $job->{stateCode},
            $job->{partition});
 }
 
@@ -477,9 +505,9 @@ sub print_job_select
            $job->{num_nodes} || "--",
            $job->{num_cpus} || "--",
            $job->{job_min_memory} || "--",
-           hhmm($job->{time_limit} * 60),
+           hhmmss($job->{time_limit} * 60),
            $job->{stateCode},
-           hhmm($job->{aWDuration}));
+           hhmmss($job->{aWDuration}));
 
     if ($execHost) {
         if (!$one) {
