@@ -124,7 +124,7 @@ sub main
         my $line = 0;
         foreach my $part (@{$resp->{partition_array}}) {
             if (@queueIds) {
-                next unless grep /^$part->{'name'}$/, @queueIds;
+                next unless grep /^$part->{name}$/, @queueIds;
             }
 
             if ($full) { # Full
@@ -145,17 +145,17 @@ sub main
         my $line = 0;
 
         foreach my $part (@{$resp->{partition_array}}) {
-            $part->{'running_jobs'} = 0;
-            $part->{'queued_jobs'} = 0;
+            $part->{running_jobs} = 0;
+            $part->{queued_jobs} = 0;
             foreach my $job (@{$jresp->{job_array}}) {
-                next if($job->{'partition'} ne $part->{'name'});
-                $part->{'running_jobs'}++
-                    if($job->{'job_state'} == JOB_RUNNING);
-                $part->{'queued_jobs'}++
-                    if($job->{'job_state'} == JOB_PENDING);
+                next if($job->{partition} ne $part->{name});
+                $part->{running_jobs}++
+                    if($job->{job_state} == JOB_RUNNING);
+                $part->{queued_jobs}++
+                    if($job->{job_state} == JOB_PENDING);
             }
-            $total_running += $part->{'running_jobs'};
-            $total_queued += $part->{'queued_jobs'};
+            $total_running += $part->{running_jobs};
+            $total_queued += $part->{queued_jobs};
             print_part_limits($part, $line);
             $line++;
         }
@@ -174,31 +174,31 @@ sub main
         my $line = 0;
         foreach my $job (@{$resp->{job_array}}) {
             my $use_time = $now_time;
-            my $state = $job->{'job_state'};
-            if ($job->{'end_time'} && $job->{'end_time'} < $now_time) {
-                $use_time = $job->{'end_time'};
+            my $state = $job->{job_state};
+            if ($job->{end_time} && $job->{end_time} < $now_time) {
+                $use_time = $job->{end_time};
             }
-            $job->{'statPSUtl'} = job_time_used($job);
-            $job->{'aWDuration'} = $job->{'statPSUtl'};
+            $job->{statPSUtl} = job_time_used($job);
+            $job->{aWDuration} = $job->{statPSUtl};
 
-            $job->{'allocNodeList'} = $job->{'nodes'} || "--";
-            $job->{'stateCode'} = stateCode($job->{'job_state'});
-            $job->{'user_name'} = getpwuid($job->{'user_id'}) || "nobody";
-            $job->{'name'} = "Allocation" if !$job->{'name'};
+            $job->{allocNodeList} = $job->{nodes} || "--";
+            $job->{stateCode} = stateCode($job->{job_state});
+            $job->{user_name} = getpwuid($job->{user_id}) || "nobody";
+            $job->{name} = "Allocation" if !$job->{name};
 
             # Filter jobs according to options and arguments
             if (@jobIds) {
-                next unless grep /^$job->{'job_id'}$/, @jobIds;
+                next unless grep /^$job->{job_id}$/, @jobIds;
             } else {
                 if ($running) {
-                    next unless ($job->{'stateCode'} eq 'R'
-                                 || $job->{'stateCode'} eq 'S');
+                    next unless ($job->{stateCode} eq 'R'
+                                 || $job->{stateCode} eq 'S');
                 }
                 if ($idle) {
-                    next unless ($job->{'stateCode'} eq 'Q');
+                    next unless ($job->{stateCode} eq 'Q');
                 }
                 if (@userIds) {
-                    next unless grep /^$job->{'user_name'}$/, @userIds;
+                    next unless grep /^$job->{user_name}$/, @userIds;
                 }
             }
 
@@ -260,12 +260,12 @@ sub hhmm
 {
     my ($hhmmss) = @_;
 
+    $hhmmss = 0 unless $hhmmss;
     if ($hhmmss == INFINITE) {
         return "Infinite";
     }
 
     # Convert hhmmss to duration in minutes
-    $hhmmss = 0 unless $hhmmss;
     $hhmmss =~ /(?:(\d+):)?(?:(\d+):)?([\d\.]+)/;
     my ($hh, $mm, $ss) = ($1 || 0, $2 || 0, $3 || 0);
 
@@ -318,11 +318,11 @@ sub ddhhmm
 {
     my ($hhmmss) = @_;
 
-    if ($hhmmss && $hhmmss == INFINITE) {
+    $hhmmss = 0 unless $hhmmss;
+    if ($hhmmss == INFINITE) {
         return "Infinite";
     }
     # Convert hhmmss to duration in minutes
-    $hhmmss = 0 unless $hhmmss;
     $hhmmss =~ /(?:(\d+):)?(?:(\d+):)?([\d\.]+)/;
     my ($hh, $mm, $ss) = ($1 || 0, $2 || 0, $3 || 0);
 
@@ -361,21 +361,21 @@ sub job_time_used
 
     my $end_time;
 
-    return 0 if ($job->{'start_time'} == 0)
-        || ($job->{'job_state'} == JOB_PENDING);
+    return 0 if ($job->{start_time} == 0)
+        || ($job->{job_state} == JOB_PENDING);
 
-    return $job->{'pre_sus_time'} if $job->{'job_state'} == JOB_SUSPENDED;
+    return $job->{pre_sus_time} if $job->{job_state} == JOB_SUSPENDED;
 
-    if (($job->{'job_state'} == JOB_RUNNING)
-        ||  ($job->{'end_time'} == 0)) {
+    if (($job->{job_state} == JOB_RUNNING)
+        ||  ($job->{end_time} == 0)) {
         $end_time = time;
     } else {
-        $end_time = $job->{'end_time'};
+        $end_time = $job->{end_time};
     }
 
-    return ($end_time - $job->{'suspend_time'} + $job->{'pre_sus_time'})
-        if $job->{'suspend_time'};
-    return ($end_time - $job->{'start_time'});
+    return ($end_time - $job->{suspend_time} + $job->{pre_sus_time})
+        if $job->{suspend_time};
+    return ($end_time - $job->{start_time});
 }
 
 sub yes_no
@@ -404,15 +404,15 @@ sub get_exec_host
     my ($job) = @_;
 
     my $execHost = "--";
-    if ($job->{'nodes'} && $job->{'job_resrcs'}) {
+    if ($job->{nodes} && $job->{job_resrcs}) {
         my @allocNodes = ();
-        my $hl = Slurm::Hostlist::create($job->{'nodes'});
+        my $hl = Slurm::Hostlist::create($job->{nodes});
         my $inx = 0;
         my $cpu_cnt = 0;
         while((my $host = Slurm::Hostlist::shift($hl))) {
             push(@allocNodes, "$host/" .
                  Slurm->job_cpus_allocated_on_node_id(
-                     $job->{'job_resrcs'}, $inx++));
+                     $job->{job_resrcs}, $inx++));
         }
         $execHost = join '+', @allocNodes;
     }
@@ -433,9 +433,10 @@ sub print_job_brief
                '-' x 19, '-' x 16, '-' x 15, '-' x 8, '-' x 1, '-' x 15);
     }
     printf("%-19.19s %-16.16s %-15.15s %-8.8s %-1.1s %-15.15s\n",
-           $job->{'job_id'}, $job->{'name'}, $job->{'user_name'},
-           ddhhmm($job->{'statPSUtl'}), $job->{'stateCode'},
-           $job->{'partition'});
+           $job->{job_id} . ($job->{array_task_str} ? "[]" : ""),
+           $job->{name}, $job->{user_name},
+           ddhhmm($job->{statPSUtl}), $job->{stateCode},
+           $job->{partition});
 }
 
 sub print_job_select
@@ -468,17 +469,17 @@ sub print_job_select
 
     printf("%-20.20s %-8.8s %-8.8s %-20.20s " .
            "%-6.6s %5.5s %5.5s %6.6s %-5.5s %-1s %-5.5s",
-           $job->{'job_id'},
-           $job->{'user_name'},
-           $job->{'partition'},
-           $job->{'name'},
+           $job->{job_id} . ($job->{array_task_str} ? "[]" : ""),
+           $job->{user_name},
+           $job->{partition},
+           $job->{name},
            $sessID,
-           $job->{'num_nodes'} || "--",
-           $job->{'num_cpus'} || "--",
-           $job->{'job_min_memory'} || "--",
-           hhmm($job->{'time_limit'} * 60),
-           $job->{'stateCode'},
-           hhmm($job->{'aWDuration'}));
+           $job->{num_nodes} || "--",
+           $job->{num_cpus} || "--",
+           $job->{job_min_memory} || "--",
+           hhmm($job->{time_limit} * 60),
+           $job->{stateCode},
+           hhmm($job->{aWDuration}));
 
     if ($execHost) {
         if (!$one) {
@@ -496,48 +497,56 @@ sub print_job_full
 {
     my ($job) = @_;
     # Print the job attributes
-    printf("Job Id:\t%s\n", $job->{'job_id'});
-    printf("\tJob_Name = %s\n", $job->{'name'}) if $job->{'name'};
+    printf("Job Id:\t%s%s\n", $job->{job_id},
+           $job->{array_task_str} ? "[$job->{array_task_str}]" : "");
+    printf("\tJob_Name = %s\n", $job->{name}) if $job->{name};
     printf("\tJob_Owner = %s@%s\n",
-           $job->{'user_name'}, $job->{'alloc_node'});
+           $job->{user_name}, $job->{alloc_node});
 
-    printf "\tinteractive = True\n" if !$job->{'batch_flag'};
+    printf "\tinteractive = True\n" if !$job->{batch_flag};
 
-    printf("\tjob_state = %s\n", $job->{'stateCode'});
-    printf("\tqueue = %s\n", $job->{'partition'});
+    printf("\tjob_state = %s\n", $job->{stateCode});
+    printf("\tqueue = %s\n", $job->{partition});
 
-    printf("\tqtime = %s\n", hRTime($job->{'submit_time'}));
-    printf("\tmtime = %s\n", hRTime($job->{'start_time'}))
-        if $job->{'start_time'};
-    printf("\tctime = %s\n", hRTime($job->{'end_time'}))
-        if $job->{'end_time'};
+    printf("\tqtime = %s\n", hRTime($job->{submit_time}));
+    printf("\tmtime = %s\n", hRTime($job->{start_time}))
+        if $job->{start_time};
+    printf("\tctime = %s\n", hRTime($job->{end_time}))
+        if $job->{end_time};
 
-    printf("\tAccount_Name = %s\n", $job->{'account'}) if $job->{'account'};
+    printf("\tAccount_Name = %s\n", $job->{account}) if $job->{account};
 
     my $execHost = get_exec_host($job);
     printf("\texec_host = %s\n", $execHost) if $execHost ne '--';
 
-    printf("\tPriority = %u\n", $job->{'priority'});
-    printf("\teuser = %s(%d)\n", $job->{'user_name'}, $job->{'user_id'});
+    printf("\tPriority = %u\n", $job->{priority});
+    printf("\teuser = %s(%d)\n", $job->{user_name}, $job->{user_id});
 
     # can't run getgrgid inside printf it appears the input gets set to
     # x if ran there.
-    my $user_group = getgrgid($job->{'group_id'});
-    printf("\tegroup = %s(%d)\n", $user_group, $job->{'group_id'});
+    my $user_group = getgrgid($job->{group_id});
+    printf("\tegroup = %s(%d)\n", $user_group, $job->{group_id});
 
-    printf("\tResource_List.walltime = %s\n", hhmmss($job->{'time_limit'} * 60));
-    printf("\tResource_List.nodect = %d\n", $job->{'num_nodes'})
-        if $job->{'num_nodes'};
-    printf("\tResource_List.ncpus = %s\n", $job->{'num_cpus'})
-        if $job->{'num_cpus'};
+    printf("\tResource_List.walltime = %s\n", hhmmss($job->{time_limit} * 60));
+    printf("\tResource_List.nodect = %d\n", $job->{num_nodes})
+        if $job->{num_nodes};
+    printf("\tResource_List.ncpus = %s\n", $job->{num_cpus})
+        if $job->{num_cpus};
 
-    if ($job->{'reqNodes'}) {
-        my $nodeExpr = $job->{'reqNodes'};
-        $nodeExpr .= ":ppn=" . $job->{'ntasks_per_node'}
-                if $job->{'ntasks_per_node'};
+    if ($job->{reqNodes}) {
+        my $nodeExpr = $job->{reqNodes};
+        $nodeExpr .= ":ppn=" . $job->{ntasks_per_node}
+                if $job->{ntasks_per_node} != INFINITE;
 
         printf("\tResource_List.nodes = %s\n", $nodeExpr);
+    } elsif ($job->{num_nodes}) {
+        printf("\tResource_List.nodes = %d", $job->{num_nodes});
+        printf(":ppn=%d", $job->{ntasks_per_node})
+            if $job->{ntasks_per_node} != INFINITE;
+        printf("\n");
     }
+    printf("\tResource_List.mem = %dMB\n", $job->{pn_min_memory})
+        if $job->{pn_min_memory} != INFINITE;
 
     print "\n";
 }
@@ -559,22 +568,22 @@ sub print_part_brief
     }
     printf("%-16.16s %5.5s %5.5s %5.5s %5.5s %5.5s %5.5s %5.5s " .
            "%5.5s %5.5s %5.5s %1.1s\n",
-           $part->{'name'}, '?', '?', yes_no($part->{'state_up'}),
-           yes_no($part->{'state_up'}), '?', '?', '?', '?', '?', '?',
-           en_dis($part->{'state_up'}));
+           $part->{name}, '?', '?', yes_no($part->{state_up}),
+           yes_no($part->{state_up}), '?', '?', '?', '?', '?', '?',
+           en_dis($part->{state_up}));
 }
 
 sub print_part_full
 {
     my ($part) = @_;
     # Print the part attributes
-    printf("Queue:\t%s\n", $part->{'name'});
+    printf("Queue:\t%s\n", $part->{name});
     printf("\tqueue_type = Execution\n");
-    printf("\tresources_default.nodes = %d\n", $part->{'total_nodes'});
+    printf("\tresources_default.nodes = %d\n", $part->{total_nodes});
 
-    printf("\tenabled = %s\n", yes_no($part->{'state_up'}));
+    printf("\tenabled = %s\n", yes_no($part->{state_up}));
 
-    printf("\tstarted = %s\n", yes_no($part->{'state_up'}));
+    printf("\tstarted = %s\n", yes_no($part->{state_up}));
 
     print "\n";
 }
@@ -593,22 +602,22 @@ sub print_part_limits
     }
 
 
-    printf("%-16.16s   --      --    ", $part->{'name'});
-    if($part->{'max_time'} != INFINITE) {
-        print(hhmmss($part->{'max_time'}*60));
+    printf("%-16.16s   --      --    ", $part->{name});
+    if($part->{max_time} != INFINITE) {
+        print(hhmmss($part->{max_time}*60));
     } else {
         printf("   --    ");
     }
 
-    if($part->{'max_nodes'} != INFINITE) {
-        printf("%4u  ", $part->{'max_nodes'});
+    if($part->{max_nodes} != INFINITE) {
+        printf("%4u  ", $part->{max_nodes});
     } else {
         printf("  --  ");
     }
 
-    printf("%3u %3u --  %1.1s %1.1s \n", $part->{'running_jobs'},
-           $part->{'queued_jobs'}, en_dis($part->{'state_up'}),
-           running_stopped($part->{'state_up'}));
+    printf("%3u %3u --  %1.1s %1.1s \n", $part->{running_jobs},
+           $part->{queued_jobs}, en_dis($part->{state_up}),
+           running_stopped($part->{state_up}));
 }
 
 # Run main
