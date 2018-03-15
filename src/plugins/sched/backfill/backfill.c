@@ -437,6 +437,7 @@ static int  _try_sched(struct job_record *job_ptr, bitstr_t **avail_bitmap,
 		if (low_start) {
 			job_ptr->start_time = low_start;
 			rc = SLURM_SUCCESS;
+			FREE_NULL_BITMAP(*avail_bitmap);
 			*avail_bitmap = low_bitmap;
 		} else {
 			rc = ESLURM_NODES_BUSY;
@@ -2262,8 +2263,10 @@ skip_start:
 		}
 		if (debug_flags & DEBUG_FLAG_BACKFILL)
 			_dump_job_sched(job_ptr, end_reserve, avail_bitmap);
-		if (qos_flags & QOS_FLAG_NO_RESERVE)
+		if (qos_flags & QOS_FLAG_NO_RESERVE) {
+			_set_job_time_limit(job_ptr, orig_time_limit);
 			continue;
+		}
 		if (bf_job_part_count_reserve) {
 			bool do_reserve = true;
 			for (j = 0; j < bf_parts; j++) {
