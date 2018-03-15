@@ -14,5 +14,5 @@ GITTAG=$(git log --format=%ct.%h -1)
 mkdir -p BUILD SOURCES SPECS RPMS BUILDROOT
 git archive --format=tar.gz -o "SOURCES/slurm-${SUFFIX}.tar.gz" --prefix="slurm-${SUFFIX}/" HEAD
 cp slurm.spec "SPECS"
-rpmbuild --define "gittag ${GITTAG}" --define "_topdir $PWD" -ba SPECS/slurm.spec --with=mysql --with=lua --with=hwloc --with=numa
+rpmbuild --define "gittag ${GITTAG}" --define "_topdir $PWD" -ba SPECS/slurm.spec
 
