@@ -756,7 +756,6 @@ sub parse_resource_list
     }
 
     if ($opt{vmem}) {
-        diag "setting mem from vmem";
         debug ("mem and vmem specified; forcing vmem value") if $opt{mem};
         $opt{mem} = $opt{vmem};
         push(@matches, 'mem');
