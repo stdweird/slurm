@@ -56,8 +56,8 @@ foreach my $resctxt (sort keys %resc) {
 # the part after nodes=
 my %nopts = (
     "1" => {hostlist => undef, node_cnt => 1, task_cnt => 0},
-    "123:ppn=321" => {hostlist => undef, node_cnt => 123, task_cnt => 321},
-    "host1+host2:ppn=3" => {hostlist => undef, node_cnt => 0, task_cnt => 3}, # TODO: fix this
+    "123:ppn=321" => {hostlist => undef, node_cnt => 123, task_cnt => 321, max_ppn => 321},
+    "host1+host2:ppn=3" => {hostlist => undef, node_cnt => 0, task_cnt => 3, max_ppn => 3}, # TODO: fix this
     );
 
 foreach my $notxt (sort keys %nopts) {
