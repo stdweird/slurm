@@ -63,8 +63,8 @@ foreach my $cmdtxt (sort keys %comms) {
     @ARGV = (@$arr);
     my ($mode, $command, $block, $script, $script_args, $defaults) = make_command();
     diag "mode ", $mode || 0;
-    diag "interactive ", ($mode & 1 << 2) ? 1 : 0;
-    diag "dryrun ", ($mode & 1 << 3) ? 1 : 0;
+    diag "interactive ", ($mode & 1 << 1) ? 1 : 0;
+    diag "dryrun ", ($mode & 1 << 2) ? 1 : 0;
     diag "command '".join(" ", @$command)."'";
     diag "block '$block'";
 
@@ -84,7 +84,7 @@ foreach my $cmdtxt (sort keys %comms) {
 $submitfilter = "/my/submitfilter";
 
 @ARGV = (@da);
-my ($interactive, $command, $block, $script, $script_args, $defaults) = make_command($submitfilter);
+my ($mode, $command, $block, $script, $script_args, $defaults) = make_command($submitfilter);
 diag "submitfilter command @$command";
 my $txt = "$sbatch $dba";
 is(join(" ", @$command), $txt, "expected command for submitfilter");
@@ -103,5 +103,32 @@ is(join(" ", @$newcommand),
    "expected command after parse_script with eo");
 is($newtxt, "#\n#PBS -l abd -o stdout.%A..%A\n#\n#PBS -e abc -N def\ncmd\n",
    "PBS_JOBID replaced");
+
+=head1 interactive job
+
+=cut
+
+@ARGV = ('-I', '-l', 'nodes=2:ppn=4', '-l', 'vmem=2gb');
+($mode, $command, $block, $script, $script_args, $defaults) = make_command($submitfilter);
+diag "interactive command @$command default ", explain $defaults;
+$txt = "$dba --mem=2048M srun --pty";
+is(join(" ", @$command), "$salloc $txt", "expected command for interactive");
+$script =~ s#^/usr##;
+is($script, '/bin/bash', "interactive script value is the bash shell command");
+is_deeply($script_args, ['-i'], 'interactive script args');
+ok($mode & 1 << 1, "interactive mode");
+ok(!($mode & 1 << 2), "no dryrun mode w interactive");
+# no 'get-user-env' (neither for salloc where it belongs but requires root; nor srun)
+is_deeply($defaults, {
+    J => 'INTERACTIVE',
+    export => 'NONE',
+}, "interactive defaults");
+
+# no 'bash -i'
+$txt = "$salloc -J INTERACTIVE $txt --export=NONE";
+($newtxt, $newcommand) = parse_script("", $command, $defaults);
+ok(!defined($newtxt), "no text for interactive job");
+is(join(" ", @$newcommand), $txt, "expected command after parse with interactive");
+
 
 done_testing();

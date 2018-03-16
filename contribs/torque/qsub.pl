@@ -58,8 +58,27 @@ use Data::Dumper;
 use IPC::Run qw(run);
 use List::Util qw(first);
 
-use constant SBATCH => "sbatch";
-use constant SALLOC => "salloc";
+BEGIN {
+    sub which
+    {
+        my ($bin) = @_;
+
+        if ($bin !~ m{^/}) {
+            foreach my $path (split(":", $ENV{PATH} || '')) {
+                my $test = "$path/$bin";
+                if (-x $test) {
+                    $bin = $test;
+                    last;
+                }
+            }
+        }
+
+        return $bin;
+    }
+}
+
+use constant SBATCH => which("sbatch");
+use constant SALLOC => which("salloc");
 
 use constant INTERACTIVE => 1 << 1;
 use constant DRYRUN => 1 << 2;
@@ -90,22 +109,6 @@ sub fatal
     die(join("ERROR:".report_txt(@_)));
 }
 
-sub which
-{
-    my ($bin) = @_;
-
-    if ($bin !~ m{^/}) {
-        foreach my $path (split(":", $ENV{PATH} || '')) {
-            my $test = "$path/$bin";
-            if (-x $test) {
-                $bin = $test;
-                last;
-            }
-        }
-    }
-
-    return $bin;
-}
 
 sub find_submitfilter
 {
@@ -305,6 +308,7 @@ sub make_command
     if ($interactive) {
         $mode |= INTERACTIVE;
         @command = (which(SALLOC));
+        $defaults->{J} = "INTERACTIVE" if exists($defaults->{J});
 
         # Always want at least one node in the allocation
         if (!$node_opts{node_cnt}) {
@@ -403,7 +407,8 @@ sub make_command
         push(@command, "--export=all");
     } else {
         $defaults->{export} = 'NONE';
-        $defaults->{"get-user-env"} = '60L';
+        # salloc with get-user-env requires user to be root
+        $defaults->{"get-user-env"} = '60L' if !$interactive;
     }
 
     push(@command, "--account=$group_list") if $group_list;
@@ -454,7 +459,12 @@ sub make_command
     push(@command, map {"--$_"} @pass);
 
     if ($interactive) {
-        push(@command, which('srun'), '--pty', 'bash', '-i');
+        # whatever is run by srun is not part of the command
+        # allows to add defaults
+        push(@command, which('srun'), '--pty');
+        $script = which('bash');
+        # use -l because there is no get-user-env
+        @script_args = ('-i', '-l');
     } elsif ($script) {
         if ($wrap && $wrap =~ 'y') {
             if ($sf) {
@@ -559,9 +569,11 @@ sub parse_script
             }
 
             if ($cmd[0] eq SALLOC &&
-                $sopt == 'get-user-env') {
-                # option for sallc, not for srun
-                @cmd = ($cmd[0], @cmds,  @cmd[$1..$#cmd])
+                grep {$sopt eq $_} ('get-user-env', 'J')) {
+                # in interactive mode
+                # option for salloc, not for srun
+                # whatever is run by srun is not part of the command
+                @cmd = ($cmd[0], @cmds, @cmd[1..$#cmd])
             } else {
                 push(@cmd, @cmds);
             }
@@ -606,6 +618,9 @@ sub main
     # Note that if interactive mode was requested,
     # the standard output and standard error are _not_ captured.
     if ($mode & INTERACTIVE) {
+        # add script and script_args
+        push(@$command, $script, @$script_args);
+
         # TODO: fix issues with space in options; also use IPC::Run
         my $command_txt = join(" ", @$command);
         my $ret = 0;
