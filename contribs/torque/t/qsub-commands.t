@@ -115,7 +115,7 @@ $txt = "$dba --mem=2048M srun --pty";
 is(join(" ", @$command), "$salloc $txt", "expected command for interactive");
 $script =~ s#^/usr##;
 is($script, '/bin/bash', "interactive script value is the bash shell command");
-is_deeply($script_args, ['-i'], 'interactive script args');
+is_deeply($script_args, ['-i', '-l'], 'interactive script args');
 ok($mode & 1 << 1, "interactive mode");
 ok(!($mode & 1 << 2), "no dryrun mode w interactive");
 # no 'get-user-env' (neither for salloc where it belongs but requires root; nor srun)
