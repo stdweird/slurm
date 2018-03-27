@@ -58,8 +58,30 @@ use Data::Dumper;
 use IPC::Run qw(run);
 use List::Util qw(first);
 
-use constant SBATCH => "sbatch";
-use constant SALLOC => "salloc";
+BEGIN {
+    sub which
+    {
+        my ($bin) = @_;
+
+        if ($bin !~ m{^/}) {
+            foreach my $path (split(":", $ENV{PATH} || '')) {
+                my $test = "$path/$bin";
+                if (-x $test) {
+                    $bin = $test;
+                    last;
+                }
+            }
+        }
+
+        return $bin;
+    }
+}
+
+use constant SBATCH => which("sbatch");
+use constant SALLOC => which("salloc");
+
+use constant INTERACTIVE => 1 << 1;
+use constant DRYRUN => 1 << 2;
 
 use constant TORQUE_CFGS => qw(/var/spool/pbs/torque.cfg /var/spool/torque/torque.cfg);
 
@@ -87,22 +109,6 @@ sub fatal
     die(join("ERROR:".report_txt(@_)));
 }
 
-sub which
-{
-    my ($bin) = @_;
-
-    if ($bin !~ m{^/}) {
-        foreach my $path (split(":", $ENV{PATH} || '')) {
-            my $test = "$path/$bin";
-            if (-x $test) {
-                $bin = $test;
-                last;
-            }
-        }
-    }
-
-    return $bin;
-}
 
 sub find_submitfilter
 {
@@ -145,7 +151,7 @@ sub make_command
         $priority,
         $requeue,
         $destination,
-        $sbatchline,
+        $dryrun,
         $variable_list,
         @additional_attributes,
         $wckey,
@@ -186,7 +192,7 @@ sub make_command
         'W=s'      => \@additional_attributes,
         'help|?'   => \$help,
         'man'      => \$man,
-        'sbatchline' => \$sbatchline,
+        'sbatchline|dryrun' => \$dryrun,
         'debug|D'      => \$debug,
         'pass=s' => \@pass,
         )
@@ -215,15 +221,18 @@ sub make_command
     }
 
     # Use sole remaining argument as jobIds
-    my ($script, @script_args, $script_cmd);
+    my ($script, @script_args, $script_cmd, $defaults);
+    my $mode = 0;
+
+    $mode |= DRYRUN if $dryrun;
 
     if ($ARGV[0]) {
         $script = shift(@ARGV);
-        $job_name = basename($script) . 'JDEFAULT' if ! $job_name;
+        $defaults->{J} = basename($script) if ! $job_name;
         @script_args = (@ARGV);
         $script_cmd = join(" ", $script, @script_args);
     } else {
-        $job_name = "sbatchJDEFAULT" if ! $job_name;
+        $defaults->{J} = "sbatch" if ! $job_name;
     }
 
     my $block = 0;
@@ -297,7 +306,9 @@ sub make_command
     my @command;
 
     if ($interactive) {
+        $mode |= INTERACTIVE;
         @command = (which(SALLOC));
+        $defaults->{J} = "INTERACTIVE" if exists($defaults->{J});
 
         # Always want at least one node in the allocation
         if (!$node_opts{node_cnt}) {
@@ -317,20 +328,24 @@ sub make_command
         @command = (which(SBATCH));
 
         if (!$join_output) {
-            if (!$err_path) {
-                $err_path = "$job_name.eEDEFAULT%A";
-                $err_path .= ".%a" if $array;
-                $err_path =~ s/JDEFAULT//;
+            if ($err_path) {
+                push(@command, "-e", $err_path);
+            } else {
+                # jobname will be forced
+                my $path = "%x.e%A";
+                $path .= ".%a" if $array;
+                $defaults->{e} = $path;
             }
-            push(@command, "-e", $err_path);
         }
 
-        if (!$out_path) {
-            $out_path = "$job_name.oODEFAULT%A";
-            $out_path .= ".%a" if $array;
-            $out_path =~ s/JDEFAULT//;
+        if ($out_path) {
+            push(@command, "-o", $out_path);
+        } else {
+            # jobname is forced
+            my $path = "%x.o%A";
+            $path .= ".%a" if $array;
+            $defaults->{o} = $path;
         }
-        push(@command, "-o", $out_path);
 
         # The job size specification may be within the batch script,
         # Reset task count if node count also specified
@@ -390,6 +405,10 @@ sub make_command
         }
     } elsif ($export_env && ! $interactive) {
         push(@command, "--export=all");
+    } else {
+        $defaults->{export} = 'NONE';
+        # salloc with get-user-env requires user to be root
+        $defaults->{"get-user-env"} = '60L' if !$interactive;
     }
 
     push(@command, "--account=$group_list") if $group_list;
@@ -440,7 +459,12 @@ sub make_command
     push(@command, map {"--$_"} @pass);
 
     if ($interactive) {
-        push(@command, which('srun'), '--pty', 'bash', '-i');
+        # whatever is run by srun is not part of the command
+        # allows to add defaults
+        push(@command, which('srun'), '--pty');
+        $script = which('bash');
+        # use -l because there is no get-user-env
+        @script_args = ('-i', '-l');
     } elsif ($script) {
         if ($wrap && $wrap =~ 'y') {
             if ($sf) {
@@ -455,15 +479,7 @@ sub make_command
         }
     }
 
-    my $command_txt = join(" ", @command);
-    if ($sbatchline) {
-        # add script_cmd here, but this is not what we would really run
-        $command_txt =~ s/[OEJ]DEFAULT//g;
-        print $command_txt.($sf && $script ? " $script_cmd" : "")."\n";
-        exit;
-    }
-
-    return $interactive, \@command, $block, $script, \@script_args;
+    return $mode, \@command, $block, $script, \@script_args, $defaults;
 }
 
 sub run_submitfilter
@@ -505,7 +521,7 @@ sub run_submitfilter
 
 sub parse_script
 {
-    my ($txt, $command) = @_;
+    my ($txt, $command, $defaults) = @_;
 
     my @cmd = @$command;
     my $newtxt;
@@ -518,11 +534,12 @@ sub parse_script
     };
 
 
-    # Look for PBS directives for -o and -e
-    # If they are set, remove the EDEFAULT / ODEFAULT commandline args
+    # Look for PBS directives for -o, -e, -N
+    # If they are not set, add the commandline args from defaults
     # keys are slurm option names
     my %map = (
-        N => 'J',
+        N => ['J'],
+        V => ['export', 'get-user-env'],
         );
     my %set;
     foreach my $line (split("\n", $txt)) {
@@ -530,22 +547,37 @@ sub parse_script
         # oset and eset on separate line, in case -e and -o are on same line,
         # mixed with otehr opts etc etc
         foreach my $pbsopt (qw(e o N)) {
-            my $opt = $map{$pbsopt} || $pbsopt;
+            my $opts = $map{$pbsopt} || [$pbsopt];
             my $pat = '^\s*#PBS.*?\s-'.$pbsopt.'\s\S';
-            $set{$opt} = 1 if $line =~ m/$pat/;
+            if ($line =~ m/$pat/) {
+                foreach my $opt (@$opts) {
+                    $set{$opt} = 1
+                };
+            }
         }
     };
 
     # slurm short options
-    foreach my $opt (qw(e o J)) {
-        my $index = first { $cmd[$_] eq "-$opt" } 0 .. $#cmd;
-        next if ! $index;
-        if ($set{$opt}) {
-            @cmd = (@cmd[0..$index-1], @cmd[$index+2..$#cmd]);
-        } else {
-            my $pat = uc($opt).'DEFAULT';
-            $cmd[$index+1] =~ s/$pat//;
-        }
+    # add any defaults that are not set
+    foreach my $sopt (sort keys %$defaults) {
+        if (!$set{$sopt}) {
+            my @cmds;
+            if (length($sopt) >= 2) {
+                @cmds = ("--$sopt=$defaults->{$sopt}");
+            } else {
+                @cmds = ("-$sopt", $defaults->{$sopt});
+            }
+
+            if ($cmd[0] eq SALLOC &&
+                grep {$sopt eq $_} ('get-user-env', 'J')) {
+                # in interactive mode
+                # option for salloc, not for srun
+                # whatever is run by srun is not part of the command
+                @cmd = ($cmd[0], @cmds, @cmd[1..$#cmd])
+            } else {
+                push(@cmd, @cmds);
+            }
+        };
     };
 
     return ($newtxt, \@cmd);
@@ -553,27 +585,18 @@ sub parse_script
 
 sub main
 {
-
     # copy the arguments; ARGV is modified when getopt parses it
     my @orig_args = (@ARGV);
 
     my $sf = find_submitfilter;
 
-    my ($interactive, $command, $block, $script, $script_args) = make_command($sf);
+    my ($mode, $command, $block, $script, $script_args, $defaults) = make_command($sf);
 
-    # Execute the command and capture its stdout, stderr, and exit status.
-    # Note that if interactive mode was requested,
-    # the standard output and standard error are _not_ captured.
-    if ($interactive) {
-        # TODO: fix issues with space in options; also use IPC::Run
-        my $command_txt = join(" ", @$command);
-        $command_txt =~ s/[OEJ]DEFAULT//g;
-        debug("Generated interactive", ($block ? ' blocking' : undef), " command '$command_txt'");
-        my $ret = system($command_txt);
-        exit ($ret >> 8);
+    my $stdin;
+    if ($mode & INTERACTIVE) {
+        $stdin = '';
     } else {
-
-        my ($stdin, $stdout);
+        my $stdout;
 
         if ($sf) {
             $stdin = run_submitfilter($sf, $script, $script_args);
@@ -585,9 +608,40 @@ sub main
 
             fatal ("No script and nothing from stdin") if !$stdin;
         }
+    }
 
-        ($stdin, $command) = parse_script($stdin, $command);
-        debug("Generated", ($block ? 'blocking' : undef), "command '".join(" ", @$command)."'");
+    # stdin is not relevant for interactive jobs
+    # but should also add the defaults
+    ($stdin, $command) = parse_script($stdin, $command, $defaults);
+
+    # Execute the command and capture its stdout, stderr, and exit status.
+    # Note that if interactive mode was requested,
+    # the standard output and standard error are _not_ captured.
+    if ($mode & INTERACTIVE) {
+        # add script and script_args
+        push(@$command, $script, @$script_args);
+
+        # TODO: fix issues with space in options; also use IPC::Run
+        my $command_txt = join(" ", @$command);
+        my $ret = 0;
+        if ($mode & DRYRUN) {
+            print "$command_txt\n";
+        } else {
+            debug("Generated interactive", ($block ? ' blocking' : undef), " command '$command_txt'");
+            $ret = system($command_txt);
+        }
+        exit ($ret >> 8);
+    } else {
+
+        my $command_txt = join(" ", @$command);
+        if ($mode & DRYRUN) {
+            print "$command_txt\n";
+            exit 0;
+        } else {
+            debug("Generated", ($block ? 'blocking' : undef), "command '$command_txt'");
+        }
+
+        my $stdout;
 
         local $@;
         eval {
@@ -687,7 +741,10 @@ sub parse_resource_list
         push(@matches, $key) if defined($opt{$key});
     }
 
-    $opt{walltime} = $opt{h_rt} if ($opt{h_rt} && !$opt{walltime});
+    if ($opt{h_rt} && !$opt{walltime}) {
+        $opt{walltime} = $opt{h_rt};
+        push(@matches, 'walltime');
+    }
 
     # If needed, un-protect the walltime string.
     if ($opt{walltime}) {
@@ -700,6 +757,7 @@ sub parse_resource_list
         $opt{accelerator} =~ /^[Tt]/ &&
         !$opt{naccelerators}) {
         $opt{naccelerators} = 1;
+        push(@matches, 'naccelerators');
     }
 
     if ($opt{cput}) {
@@ -709,16 +767,19 @@ sub parse_resource_list
     if ($opt{mpiprocs} &&
         (!$opt{mppnppn} || ($opt{mpiprocs} > $opt{mppnppn}))) {
         $opt{mppnppn} = $opt{mpiprocs};
+        push(@matches, 'mppnppn');
     }
 
     if ($opt{vmem}) {
         debug ("mem and vmem specified; forcing vmem value") if $opt{mem};
         $opt{mem} = $opt{vmem};
+        push(@matches, 'mem');
     }
 
     if ($opt{pvmem}) {
         debug ("pmem and pvmem specified; forcing pvmem value") if $opt{pmem};
         $opt{pmem} = $opt{pvmem};
+        push(@matches, 'pmem');
     }
 
     $opt{pmem} = convert_mb_format($opt{pmem}) if $opt{pmem};
@@ -726,8 +787,10 @@ sub parse_resource_list
     if ($opt{h_vmem}) {
         # Transfer over the GridEngine value (no conversion)
         $opt{mem} = $opt{h_vmem};
+        push(@matches, 'mem');
     } elsif ($opt{mppmem}) {
         $opt{mem} = convert_mb_format($opt{mppmem});
+        push(@matches, 'mem');
     } elsif ($opt{mem}) {
         $opt{mem} = convert_mb_format($opt{mem});
     }
@@ -982,6 +1045,10 @@ Full documentation
 =item B<-D> | B<--debug>
 
 Report some debug information, e.g. the actual SLURM command.
+
+=item B<--dryrun>
+
+Only print the command, do not actually run.
 
 =item B<--pass>
 

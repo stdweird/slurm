@@ -1,6 +1,9 @@
 This file describes changes in recent versions of Slurm. It primarily
 documents those changes that are of interest to users and administrators.
 
+* Changes in Slurm 17.11.6
+==========================
+
 * Changes in Slurm 17.11.5
 ==========================
  -- Fix cloud nodes getting stuck in DOWN+POWER_UP+NO_RESPOND state after not
@@ -8,6 +11,25 @@ documents those changes that are of interest to users and administrators.
  -- Add job's array_task_cnt and user_name along with partitions
     [max|def]_mem_per_[cpu|node], max_cpus_per_node, and max_share with the
     SHARED_FORCE definition to the job_submit/lua plugin.
+ -- srun - fix for SLURM_JOB_NUM_NODES env variable assignment.
+ -- sacctmgr - fix runaway jobs identification.
+ -- Fix for setting always the correct status on job update in mysql.
+ -- Fix issue if running with an association manager cache (slurmdbd was down
+    when slurmctld was started) you could loose QOS usage information.
+ -- CRAY - Fix spec file to work correctly.
+ -- Set scontrol exit code to 1 if attempting to update a node state to DRAIN
+    or DOWN without specifying a reason.
+ -- Fix race condition when running with an association manager cache
+    (slurmdbd was down when slurmctld was started).
+ -- Print out missing SLURM_PERSIST_INIT slurmdbd message type.
+ -- Fix two build errors related to use of the O_CLOEXEC flag with older glibc.
+ -- Add Google Cloud Platform integration scripts into contribs directory.
+ -- Fix minor potential memory leak in backfill plugin.
+ -- Add missing node flags (maint/power/etc) to node states.
+ -- Fix issue where job time limits may end up at 1 minute when using the
+    NoReserve flag on their QOS.
+ -- Fix security issue in accounting_storage/mysql plugin by always escaping
+    strings within the slurmdbd. CVE-2018-7033.
 
 * Changes in Slurm 17.11.4
 ==========================
@@ -653,6 +675,9 @@ documents those changes that are of interest to users and administrators.
     '--quit-on-interrupt' to '--qos'.
  -- Change sched_min_interval default from 0 to 2 microseconds.
 
+* Changes in Slurm 17.02.11
+==========================
+
 * Changes in Slurm 17.02.10
 ==========================
  -- Fix updating of requested TRES memory.
@@ -682,6 +707,10 @@ documents those changes that are of interest to users and administrators.
     the first job fail. This fix lets all task array elements that can run
     proceed rather than stopping all subsequent task array elements.
  -- Fix whole node allocation cpu counts when --hint=nomultihtread.
+ -- NRT - Fix issue when running on a HFI (p775) system with multiple protocols.
+ -- Fix uninitialized variables when unpacking slurmdb_archive_cond_t.
+ -- Fix security issue in accounting_storage/mysql plugin by always escaping
+    strings within the slurmdbd. CVE-2018-7033.
 
 * Changes in Slurm 17.02.9
 ==========================
