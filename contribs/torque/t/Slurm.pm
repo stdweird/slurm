@@ -25,6 +25,17 @@ our %EXPORT_TAGS = (
     all => \@EXPORT_OK,
     );
 
+sub new {
+    my $self = {};
+    bless $self, 'Slurm';
+    return $self;
+};
+
+sub get_end_time {1;};
+
+sub load_job {
+    return {job_array => [{comment => 'acomment'}]};
+}
 
 package Slurm::Hostlist;
 
