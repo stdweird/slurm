@@ -16,10 +16,12 @@ use Slurm ':all';
 use Slurmdb ':all'; # needed for getting the correct cluster dims
 use Switch;
 
-sub main
+# shared namespace with qsub
+sub qalter_main
 {
     my (
         $new_name,
+        @resource_list,
         $output,
         $rerun,
         $man,
@@ -31,6 +33,7 @@ sub main
         'N=s'    => \$new_name,
         'r=s'    => \$rerun,
         'o=s'    => \$output,
+        #'l=s'    => \@resource_list,
         'help|?' => \$help,
         'man'    => \$man
         )
@@ -76,7 +79,7 @@ sub main
             -exitstatus => 153,
             );
     }
-    if ((not defined($new_name)) and (not defined($rerun)) and (not defined($output))) {
+    if ((not defined($new_name)) and (not defined($rerun)) and (not defined($output)) and (not @resource_list)) {
         pod2usage(
             -message => "no argument given!",
             -verbose => 0,
@@ -90,13 +93,13 @@ sub main
     # Use Slurm's Perl API to change name of a job
     if ($new_name) {
         $update{name} = $new_name;
-        update(\%update, 'name')
+        qalter_update(\%update, 'name')
     }
 
     # Use Slurm's Perl API to change the requeue job flag
     if ($rerun) {
         $update{requeue} = (($rerun eq "n") || ($rerun eq "N")) ? 1 : 0;
-        update(\%update, 'requeue')
+        qalter_update(\%update, 'requeue')
     }
 
     # Use Slurm's Perl API to change Comment string
@@ -131,14 +134,29 @@ sub main
 
         # Update comment and print usage if there is a response
         $update{comment} = $comment;
-        update(\%update, 'comment')
+        qalter_update(\%update, 'comment')
     }
+
+    if (@resource_list) {
+        # give it to make_command from qsub as interactive job
+        local @ARGV = ('-I', (map {('-l', $_)} @resource_list));
+
+        # do not look at the next line...
+        require "qsub.pl";
+
+        my ($mode, $command, $block, $script, $script_args, $defaults) = make_command();
+
+        # extract all long options from command
+        my $longopts = {map {$_ =~ m/^--([\w-]+)=(.*)/; $1 => $2} grep {m/^--[\w-]+=/} @$command};
+        $longopts->{job_id} = $job_id;
+        qalter_update($longopts, 'resource_list')
+    };
 }
 
 
-sub update
+sub qalter_update
 {
-    my ($opts, $msg) = $_;
+    my ($opts, $msg) = @_;
 
     if (Slurm->update_job($opts)) {
         my $err = Slurm->get_errno();
@@ -152,7 +170,7 @@ sub update
 }
 
 # Run main
-main() unless caller;
+qalter_main() unless caller;
 
 
 ##############################################################################

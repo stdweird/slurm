@@ -1,4 +1,4 @@
-#! /usr/bin/perl -w
+#!/usr/bin/perl -w
 ###############################################################################
 #
 # qsub - submit a batch job in familar pbs/Grid Engine format.
@@ -84,8 +84,11 @@ use constant INTERACTIVE => 1 << 1;
 use constant DRYRUN => 1 << 2;
 
 use constant TORQUE_CFGS => qw(/var/spool/pbs/torque.cfg /var/spool/torque/torque.cfg);
+use constant DEFAULT_SHELL => '/bin/bash';
 
-my $var_list_pattern = qr/(?:(?<=")[^"]*(?=(?:\s*"\s*,|\s*"\s*$)))|(?<=,)(?:[^",]*(?=(?:\s*,|\s*$)))|(?<=^)(?:[^",]+(?=(?:\s*,|\s*$)))|(?<=^)(?:[^",]*(?=(?:\s*,)))/;
+# there's some strange bug that resets HOME and USER
+#   it's probably safe to export them, they are fixed
+use constant INTERACTIVE_MISSING_VARS => qw(USER HOME);
 
 # Global debug flag
 my $debug;
@@ -236,7 +239,7 @@ sub make_command
     }
 
     my $block = 0;
-    my ($depend, $group_list, %res_opts, %node_opts);
+    my ($depend, $group_list, $res_opts, $node_opts);
 
     # remove PBS_NODEFILE environment as passed in to qsub.
     if ($ENV{PBS_NODEFILE}) {
@@ -260,37 +263,8 @@ sub make_command
         }
     }
 
-    if (@resource_list) {
-        foreach my $rl (@resource_list) {
-            my ($opts, $matches) = parse_resource_list($rl);
-            # Loop over all values, how to determine that a value is not reset with default option?
-            if (!%res_opts) {
-                # nothing done yet, set all values, incl defaults/undef
-                %res_opts = %$opts;
-            } else {
-                # only set/update matches
-                foreach my $key (@$matches) {
-                    $res_opts{$key} = $opts->{$key};
-                }
-            }
-        }
-
-        if ($res_opts{nodes}) {
-            %node_opts = %{parse_node_opts($res_opts{nodes})};
-        }
-        if ($res_opts{select} && (!$node_opts{node_cnt} || ($res_opts{select} > $node_opts{node_cnt}))) {
-            $node_opts{node_cnt} = $res_opts{select};
-        }
-        if ($res_opts{select} && $res_opts{ncpus} && $res_opts{mpiprocs}) {
-            my $cpus_per_task = int ($res_opts{ncpus} / $res_opts{mppnppn});
-            if (!$res_opts{mppdepth} || ($cpus_per_task > $res_opts{mppdepth})) {
-                $res_opts{mppdepth} = $cpus_per_task;
-            }
-        }
-        if ($node_opts{max_ppn} && ! $res_opts{mppnppn}) {
-            $res_opts{mppnppn} = $node_opts{max_ppn};
-        }
-    }
+    ($res_opts, $node_opts) = parse_all_resource_list(@resource_list)
+        if @resource_list;
 
     if (@pe_ev_opts) {
         my %pe_opts = %{parse_pe_opts(@pe_ev_opts)};
@@ -300,29 +274,34 @@ sub make_command
         # access to a single pool of shared memory.  The SGE PE restricts
         # the slots used to a threads on a single host, so in this, I think
         # it is equivalent to the --cpus-per-task option of sbatch.
-        $res_opts{mppdepth} = $pe_opts{shm} if $pe_opts{shm};
+        $res_opts->{mppdepth} = $pe_opts{shm} if $pe_opts{shm};
     }
 
+    # The (main) command
     my @command;
+    # The interactive sub-command (is added to regular command in both cases)
+    my @intcommand;
 
     if ($interactive) {
         $mode |= INTERACTIVE;
         @command = (which(SALLOC));
+        @intcommand = (which('srun'), '--pty');
         $defaults->{J} = "INTERACTIVE" if exists($defaults->{J});
+        $defaults->{'cpu-bind'} = 'v,none';
 
         # Always want at least one node in the allocation
-        if (!$node_opts{node_cnt}) {
-            $node_opts{node_cnt} = 1;
+        if (!$node_opts->{node_cnt}) {
+            $node_opts->{node_cnt} = 1;
         }
 
         # Calculate the task count based of the node cnt and the amount
         # of ppn's in the request
-        if ($node_opts{task_cnt}) {
-            $node_opts{task_cnt} *= $node_opts{node_cnt};
+        if ($node_opts->{task_cnt}) {
+            $node_opts->{task_cnt} *= $node_opts->{node_cnt};
         }
 
-        if (!$node_opts{node_cnt} && !$node_opts{task_cnt} && !$node_opts{hostlist}) {
-            $node_opts{task_cnt} = 1;
+        if (!$node_opts->{node_cnt} && !$node_opts->{task_cnt} && !$node_opts->{hostlist}) {
+            $node_opts->{task_cnt} = 1;
         }
     } else {
         @command = (which(SBATCH));
@@ -349,89 +328,84 @@ sub make_command
 
         # The job size specification may be within the batch script,
         # Reset task count if node count also specified
-        if ($node_opts{task_cnt} && $node_opts{node_cnt}) {
-            $node_opts{task_cnt} *= $node_opts{node_cnt};
+        if ($node_opts->{task_cnt} && $node_opts->{node_cnt}) {
+            $node_opts->{task_cnt} *= $node_opts->{node_cnt};
         }
     }
 
     # job_name is always passed, because sbatch calls happen with stdin redirected
     push(@command, "-J", $job_name) if $job_name;
 
-    push(@command, "-N$node_opts{node_cnt}") if $node_opts{node_cnt};
-    push(@command, "-n$node_opts{task_cnt}") if $node_opts{task_cnt};
-    push(@command, "-w$node_opts{hostlist}") if $node_opts{hostlist};
+    push(@command, "--nodes=$node_opts->{node_cnt}") if $node_opts->{node_cnt};
+    push(@command, "--ntasks=$node_opts->{task_cnt}") if $node_opts->{task_cnt};
+    push(@command, "--nodelist=$node_opts->{hostlist}") if $node_opts->{hostlist};
 
-    push(@command, "-D$workdir") if $workdir;
+    push(@command, "--chdir=$workdir") if $workdir;
 
-    push(@command, "--mincpus=$res_opts{ncpus}") if $res_opts{ncpus};
-    push(@command, "--ntasks-per-node=$res_opts{mppnppn}")  if $res_opts{mppnppn};
+    push(@command, "--mincpus=$res_opts->{ncpus}") if $res_opts->{ncpus};
+    push(@command, "--ntasks-per-node=$res_opts->{mppnppn}")  if $res_opts->{mppnppn};
 
-    if ($res_opts{walltime}) {
-        push(@command, "-t$res_opts{walltime}");
-    } elsif ($res_opts{cput}) {
-        push(@command, "-t$res_opts{cput}");
-    } elsif($res_opts{pcput}) {
-        push(@command, "-t$res_opts{pcput}");
+    my $time;
+    if ($res_opts->{walltime}) {
+        $time = $res_opts->{walltime};
+    } elsif ($res_opts->{cput}) {
+        $time = $res_opts->{cput};
+    } elsif($res_opts->{pcput}) {
+        $time = $res_opts->{pcput};
     }
+    push(@command, "--time=$time") if defined($time);
 
     if ($variable_list) {
+        my $vars = split_variables($variable_list);
+
+        my @vars;
         if ($interactive) {
-            $variable_list =~ s/\'/\"/g;
-            my @parts = $variable_list =~ m/$var_list_pattern/g;
-            foreach my $part (@parts) {
-                my ($key, $value) = $part =~ /(.*)=(.*)/;
-                if (defined($key) && defined($value)) {
-                    $ENV{$key} = $value;
-                }
+            @vars = $export_env ? qw(all) : INTERACTIVE_MISSING_VARS;
+
+            # also set the values
+            foreach my $var (grep {defined($vars->{$_})} sort keys %$vars) {
+                $ENV{$var} = $vars->{$var};
             }
         } else {
-            my @vars = ($export_env ? 'all' : 'none');
-
-            # The logic below ignores quoted commas, but the quotes must be escaped
-            # to be forwarded from the shell to Perl. For example:
-            #        qsub -v foo=\"b,ar\" tmp
-            $variable_list =~ s/\'/\"/g;
-            my @parts = $variable_list =~ m/$var_list_pattern/g;
-
-            foreach my $part (@parts) {
-                my ($key, $value) = $part =~ /(.*)=(.*)/;
-                if (defined($key) && defined($value)) {
-                    push(@vars, "$key=$value");
-                } elsif (defined($ENV{$part})) {
-                    push(@vars, "$part=$ENV{$part}");
-                }
-            }
-            push(@command, "--export=".join(',', @vars));
+            @vars = ($export_env ? 'all' : 'none');
         }
-    } elsif ($export_env && ! $interactive) {
-        push(@command, "--export=all");
+
+        push(@vars, (map {$_.(defined($vars->{$_}) ? "=$vars->{$_}" : "")} sort keys %$vars));
+        # command is execute in non-subshell, so no magic quting required
+        push(@intcommand, "--export=".join(',', @vars));
+    } elsif ($export_env) {
+        push(@intcommand, "--export=all");
     } else {
-        $defaults->{export} = 'NONE';
-        # salloc with get-user-env requires user to be root
-        $defaults->{"get-user-env"} = '60L' if !$interactive;
+        if ($interactive) {
+            $defaults->{export} = join(',', INTERACTIVE_MISSING_VARS);
+            # salloc with get-user-env requires user to be root
+        } else {
+            $defaults->{export} = 'NONE';
+            $defaults->{"get-user-env"} = '60L';
+        }
     }
 
     push(@command, "--account=$group_list") if $group_list;
     push(@command, "--array=$array") if $array;
-    push(@command, "--constraint=$res_opts{proc}") if $res_opts{proc};
+    push(@command, "--constraint=$res_opts->{proc}") if $res_opts->{proc};
     push(@command, "--dependency=$depend")   if $depend;
-    push(@command, "--tmp=$res_opts{file}")  if $res_opts{file};
+    push(@command, "--tmp=$res_opts->{file}")  if $res_opts->{file};
 
-    if ($res_opts{mem} && ! $res_opts{pmem}) {
-        push(@command, "--mem=$res_opts{mem}");
-    } elsif ($res_opts{pmem} && ! $res_opts{mem}) {
-        push(@command, "--mem-per-cpu=$res_opts{pmem}");
-    } elsif ($res_opts{pmem} && $res_opts{mem}) {
+    if ($res_opts->{mem} && ! $res_opts->{pmem}) {
+        push(@command, "--mem=$res_opts->{mem}");
+    } elsif ($res_opts->{pmem} && ! $res_opts->{mem}) {
+        push(@command, "--mem-per-cpu=$res_opts->{pmem}");
+    } elsif ($res_opts->{pmem} && $res_opts->{mem}) {
         fatal("Both mem and pmem defined");
     }
-    push(@command, "--nice=$res_opts{nice}") if $res_opts{nice};
+    push(@command, "--nice=$res_opts->{nice}") if $res_opts->{nice};
 
-    push(@command, "--gres=gpu:$res_opts{naccelerators}") if $res_opts{naccelerators};
+    push(@command, "--gres=gpu:$res_opts->{naccelerators}") if $res_opts->{naccelerators};
 
     # Cray-specific options
-    push(@command, "-n$res_opts{mppwidth}") if $res_opts{mppwidth};
-    push(@command, "-w$res_opts{mppnodes}") if $res_opts{mppnodes};
-    push(@command, "--cpus-per-task=$res_opts{mppdepth}") if $res_opts{mppdepth};
+    push(@command, "--ntasks=$res_opts->{mppwidth}") if $res_opts->{mppwidth};
+    push(@command, "--nodelist=$res_opts->{mppnodes}") if $res_opts->{mppnodes};
+    push(@command, "--cpus-per-task=$res_opts->{mppdepth}") if $res_opts->{mppdepth};
 
     push(@command, "--begin=$start_time") if $start_time;
     push(@command, "--account=$account") if $account;
@@ -458,10 +432,12 @@ sub make_command
 
     push(@command, map {"--$_"} @pass);
 
+    # join command and intcommand
+    push(@command, @intcommand);
+
     if ($interactive) {
         # whatever is run by srun is not part of the command
         # allows to add defaults
-        push(@command, which('srun'), '--pty');
         $script = which('bash');
         # use -l because there is no get-user-env
         @script_args = ('-i', '-l');
@@ -480,6 +456,19 @@ sub make_command
     }
 
     return $mode, \@command, $block, $script, \@script_args, $defaults;
+}
+
+
+# split comma-sep list of variables (optional value) like x,y=value,z=,zz=","
+# return hashref; undef value means no value was set
+sub split_variables
+{
+    my ($txt) = @_;
+
+    my @vars = split(qr{,(?=\w+(?:,|=|$))}, $txt);
+    # use m/^(\w+)(?:=(['"]?)(.*)\2)?$/ to remove quote
+    # but regular quotes will not get passed due to the shell parser
+    return {map {$_ =~ m/^(\w+)(?:=(.*))?$/; $1 => $2} grep {m/^\w+/} @vars};
 }
 
 sub run_submitfilter
@@ -526,9 +515,18 @@ sub parse_script
     my @cmd = @$command;
     my $newtxt;
 
+    my @lines;
+    @lines = split("\n", $txt) if defined $txt;
+
+    # insert shebang
+    if (defined($txt) && (!@lines || $lines[0] !~ m/^#!/)) {
+        # no shebang, insert SHELL
+        $newtxt .= "#!".($ENV{SHELL} || DEFAULT_SHELL)."\n";
+    }
+
     # replace PBS_JOBID in -o / -e
     # All script changes here
-    foreach my $line (split("\n", $txt)) {
+    foreach my $line (@lines) {
         $line =~ s/\$\{?PBS_JOBID\}?/%A/g if $line =~ m/^\s*#PBS.*?\s-[oe](\s|$)/;
         $newtxt .= "$line\n";
     };
@@ -542,7 +540,7 @@ sub parse_script
         V => ['export', 'get-user-env'],
         );
     my %set;
-    foreach my $line (split("\n", $txt)) {
+    foreach my $line (@lines) {
         last if $line !~ m/^\s*(#|$)/;
         # oset and eset on separate line, in case -e and -o are on same line,
         # mixed with otehr opts etc etc
@@ -593,9 +591,7 @@ sub main
     my ($mode, $command, $block, $script, $script_args, $defaults) = make_command($sf);
 
     my $stdin;
-    if ($mode & INTERACTIVE) {
-        $stdin = '';
-    } else {
+    if (!($mode & INTERACTIVE)) {
         my $stdout;
 
         if ($sf) {
@@ -633,6 +629,8 @@ sub main
         exit ($ret >> 8);
     } else {
 
+        # TODO: fix issues with space in options
+        #   the actual code execution is done without subshell , so no worries there
         my $command_txt = join(" ", @$command);
         if ($mode & DRYRUN) {
             print "$command_txt\n";
@@ -801,6 +799,45 @@ sub parse_resource_list
 
     return \%opt, \@matches;
 }
+
+sub parse_all_resource_list
+{
+    my (@resource_list) = @_;
+
+    my ($res_opts, $node_opts);
+    foreach my $rl (@resource_list) {
+        my ($opts, $matches) = parse_resource_list($rl);
+        # Loop over all values, how to determine that a value is not reset with default option?
+        if ($res_opts && %$res_opts) {
+            # only set/update matches
+            foreach my $key (@$matches) {
+                $res_opts->{$key} = $opts->{$key};
+            }
+        } else {
+            # nothing done yet, set all values, incl defaults/undef
+            $res_opts = $opts;
+        }
+    }
+
+    if ($res_opts->{nodes}) {
+        $node_opts = parse_node_opts($res_opts->{nodes});
+    }
+    if ($res_opts->{select} && (!$node_opts->{node_cnt} || ($res_opts->{select} > $node_opts->{node_cnt}))) {
+        $node_opts->{node_cnt} = $res_opts->{select};
+    }
+    if ($res_opts->{select} && $res_opts->{ncpus} && $res_opts->{mpiprocs}) {
+        my $cpus_per_task = int ($res_opts->{ncpus} / $res_opts->{mppnppn});
+        if (!$res_opts->{mppdepth} || ($cpus_per_task > $res_opts->{mppdepth})) {
+            $res_opts->{mppdepth} = $cpus_per_task;
+        }
+    }
+    if ($node_opts->{max_ppn} && ! $res_opts->{mppnppn}) {
+        $res_opts->{mppnppn} = $node_opts->{max_ppn};
+    }
+
+    return ($res_opts, $node_opts);
+}
+
 
 sub parse_node_opts
 {

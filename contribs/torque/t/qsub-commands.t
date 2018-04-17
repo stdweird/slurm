@@ -26,7 +26,7 @@ my $salloc = which("salloc");
 # default args
 my @da = qw(script arg1 -l nodes=2:ppn=4);
 # default batch argument string
-my $dba = "-N2 -n8 --ntasks-per-node=4";
+my $dba = "--nodes=2 --ntasks=8 --ntasks-per-node=4";
 # defaults
 my $defs = {
     e => '%x.e%A',
@@ -41,9 +41,9 @@ my $dsa = "script arg1";
 my %comms = (
     "$dba $dsa", [@da],
     # should be equal
-    "$dba -t1 --mem=1024M $dsa Y", [qw(-l mem=1g,walltime=1), @da, 'Y'],
-    "$dba -t1 --mem=1024M $dsa X", [qw(-l mem=1g -l walltime=1), @da, 'X'],
-    "$dba -t1 --mem=1024M $dsa X", [@da, 'X', qw(-l vmem=1g -l walltime=1)],
+    "$dba --time=1 --mem=1024M $dsa Y", [qw(-l mem=1g,walltime=1), @da, 'Y'],
+    "$dba --time=1 --mem=1024M $dsa X", [qw(-l mem=1g -l walltime=1), @da, 'X'],
+    "$dba --time=1 --mem=1024M $dsa X", [@da, 'X', qw(-l vmem=1g -l walltime=1)],
 
     "$dba --mem=2048M $dsa", [qw(-l vmem=2gb), @da],
     "$dba --mem-per-cpu=10M $dsa", [qw(-l pvmem=10mb), @da],
@@ -91,18 +91,22 @@ is(join(" ", @$command), $txt, "expected command for submitfilter");
 
 # no match
 $txt .= " -J script -e %x.e%A --export=NONE --get-user-env=60L -o %x.o%A";
-my ($newtxt, $newcommand) = parse_script("", $command, $defaults);
+my ($newtxt, $newcommand) = parse_script('', $command, $defaults);
 is(join(" ", @$newcommand), $txt, "expected command after parse_script without eo");
 
 # replace PBS_JOBID
 # no -o/e/J
-my $stdin = "#\n#PBS -l abd -o stdout.\${PBS_JOBID}..\$PBS_JOBID\n#\n#PBS -e abc -N def\ncmd\n";
-($newtxt, $newcommand) = parse_script($stdin, $command, $defaults);
-is(join(" ", @$newcommand),
-   "$sbatch -N2 -n8 --ntasks-per-node=4 --export=NONE --get-user-env=60L",
-   "expected command after parse_script with eo");
-is($newtxt, "#\n#PBS -l abd -o stdout.%A..%A\n#\n#PBS -e abc -N def\ncmd\n",
-   "PBS_JOBID replaced");
+# insert shebang
+{
+    local $ENV{SHELL} = '/some/shell';
+    my $stdin = "#\n#PBS -l abd -o stdout.\${PBS_JOBID}..\$PBS_JOBID\n#\n#PBS -e abc -N def\ncmd\n";
+    ($newtxt, $newcommand) = parse_script($stdin, $command, $defaults);
+    is(join(" ", @$newcommand),
+       "$sbatch --nodes=2 --ntasks=8 --ntasks-per-node=4 --export=NONE --get-user-env=60L",
+       "expected command after parse_script with eo");
+    is($newtxt, "#!/some/shell\n#\n#PBS -l abd -o stdout.%A..%A\n#\n#PBS -e abc -N def\ncmd\n",
+       "PBS_JOBID replaced");
+}
 
 =head1 interactive job
 
@@ -121,12 +125,13 @@ ok(!($mode & 1 << 2), "no dryrun mode w interactive");
 # no 'get-user-env' (neither for salloc where it belongs but requires root; nor srun)
 is_deeply($defaults, {
     J => 'INTERACTIVE',
-    export => 'NONE',
+    export => 'USER,HOME',
+    'cpu-bind' => 'v,none',
 }, "interactive defaults");
 
 # no 'bash -i'
-$txt = "$salloc -J INTERACTIVE $txt --export=NONE";
-($newtxt, $newcommand) = parse_script("", $command, $defaults);
+$txt = "$salloc -J INTERACTIVE $txt --cpu-bind=v,none --export=USER,HOME";
+($newtxt, $newcommand) = parse_script(undef, $command, $defaults);
 ok(!defined($newtxt), "no text for interactive job");
 is(join(" ", @$newcommand), $txt, "expected command after parse with interactive");
 
