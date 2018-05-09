@@ -595,7 +595,7 @@ sub main
         my $stdout;
 
         if ($sf) {
-            $stdin = run_submitfilter($sf, $script, $script_args);
+            $stdin = run_submitfilter($sf, $script, \@orig_args);
         } elsif (!$script) {
             # read from input
             while (<STDIN>) {
