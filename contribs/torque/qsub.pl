@@ -86,9 +86,9 @@ use constant DRYRUN => 1 << 2;
 use constant TORQUE_CFGS => qw(/var/spool/pbs/torque.cfg /var/spool/torque/torque.cfg);
 use constant DEFAULT_SHELL => '/bin/bash';
 
-# there's some strange bug that resets HOME and USER
+# there's some strange bug that resets HOME and USER and TERM
 #   it's probably safe to export them, they are fixed
-use constant INTERACTIVE_MISSING_VARS => qw(USER HOME);
+use constant INTERACTIVE_MISSING_VARS => qw(USER HOME TERM);
 
 # Global debug flag
 my $debug;
