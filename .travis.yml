@@ -19,7 +19,6 @@ addons:
     - valgrind
     - libfreeipmi-dev
     - man2html
-    - mariadb-dev
 compiler:
   - clang
   - gcc
