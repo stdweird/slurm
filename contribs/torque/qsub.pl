@@ -57,6 +57,7 @@ use Data::Dumper;
 # not in perl, but packaged in every OS
 use IPC::Run qw(run);
 use List::Util qw(first);
+use Carp;
 
 BEGIN {
     sub which
@@ -109,7 +110,8 @@ sub debug
 
 sub fatal
 {
-    die(join("ERROR:".report_txt(@_)));
+    print "ERROR: ".report_txt(@_);
+    exit 1;
 }
 
 
@@ -592,9 +594,20 @@ sub main
     if (!($mode & INTERACTIVE)) {
         my $stdout;
 
+        if ($script && !-f $script) {
+            fatal("No jobscript $script");
+        }
+
         if ($sf) {
+            # script or no script
             $stdin = run_submitfilter($sf, $script, \@orig_args);
-        } elsif (!$script) {
+        } elsif ($script) {
+            open(my $fh, '<', $script);
+            while (<$fh>) {
+                $stdin .= $_;
+            }
+            close($fh);
+        } else {
             # read from input
             while (<STDIN>) {
                 $stdin .= $_;
