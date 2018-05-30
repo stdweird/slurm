@@ -133,9 +133,11 @@ sub find_submitfilter
     return $sf;
 }
 
+
+# fake: some mocked interactive mode, used in qalter
 sub make_command
 {
-    my ($sf) = @_;
+    my ($sf, $fake) = @_;
     my (
         $start_time,
         $account,
@@ -282,7 +284,7 @@ sub make_command
     # The interactive sub-command (is added to regular command in both cases)
     my @intcommand;
 
-    if ($interactive) {
+    if ($interactive || $fake) {
         $mode |= INTERACTIVE;
         @command = (which(SALLOC));
         @intcommand = (which('srun'), '--pty');
@@ -290,18 +292,14 @@ sub make_command
         $defaults->{'cpu-bind'} = 'v,none';
 
         # Always want at least one node in the allocation
-        if (!$node_opts->{node_cnt}) {
+        if (!$node_opts->{node_cnt} && !$fake) {
             $node_opts->{node_cnt} = 1;
         }
 
         # Calculate the task count based of the node cnt and the amount
         # of ppn's in the request
-        if ($node_opts->{task_cnt}) {
+        if ($node_opts->{task_cnt} && (!$fake || $node_opts->{node_cnt})) {
             $node_opts->{task_cnt} *= $node_opts->{node_cnt};
-        }
-
-        if (!$node_opts->{node_cnt} && !$node_opts->{task_cnt} && !$node_opts->{hostlist}) {
-            $node_opts->{task_cnt} = 1;
         }
     } else {
         @command = (which(SBATCH));
@@ -546,7 +544,7 @@ sub parse_script
         # mixed with otehr opts etc etc
         foreach my $pbsopt (qw(e o N)) {
             my $opts = $map{$pbsopt} || [$pbsopt];
-            my $pat = '^\s*#PBS.*?\s-'.$pbsopt.'\s\S';
+            my $pat = '^\s*#PBS.*?\s-'.$pbsopt.'\s+\S';
             if ($line =~ m/$pat/) {
                 foreach my $opt (@$opts) {
                     $set{$opt} = 1
