@@ -58,6 +58,7 @@ use Data::Dumper;
 use IPC::Run qw(run);
 use List::Util qw(first);
 use Carp;
+use Cwd;
 
 BEGIN {
     sub which
@@ -233,6 +234,9 @@ sub make_command
 
     $mode |= DRYRUN if $dryrun;
 
+    # torque defaults to start from homedir
+    $defaults->{chdir} = $ENV{HOME};
+
     if ($ARGV[0]) {
         $script = shift(@ARGV);
         $defaults->{J} = basename($script) if ! $job_name;
@@ -308,20 +312,22 @@ sub make_command
 
         if (!$join_output) {
             if ($err_path) {
+                $err_path = getcwd . "/err_path" if $err_path !~ m{^/};
                 push(@command, "-e", $err_path);
             } else {
                 # jobname will be forced
-                my $path = "%x.e%A";
+                my $path = getcwd . "/%x.e%A";
                 $path .= ".%a" if $array;
                 $defaults->{e} = $path;
             }
         }
 
         if ($out_path) {
+            $out_path = getcwd . "/out_path" if $out_path !~ m{^/};
             push(@command, "-o", $out_path);
         } else {
             # jobname is forced
-            my $path = "%x.o%A";
+            my $path = getcwd . "/%x.o%A";
             $path .= ".%a" if $array;
             $defaults->{o} = $path;
         }
