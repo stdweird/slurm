@@ -57,6 +57,8 @@ use Data::Dumper;
 # not in perl, but packaged in every OS
 use IPC::Run qw(run);
 use List::Util qw(first);
+use Carp;
+use Cwd;
 
 BEGIN {
     sub which
@@ -109,7 +111,8 @@ sub debug
 
 sub fatal
 {
-    die(join("ERROR:".report_txt(@_)));
+    print "ERROR: ".report_txt(@_);
+    exit 1;
 }
 
 
@@ -133,9 +136,11 @@ sub find_submitfilter
     return $sf;
 }
 
+
+# fake: some mocked interactive mode, used in qalter
 sub make_command
 {
-    my ($sf) = @_;
+    my ($sf, $fake) = @_;
     my (
         $start_time,
         $account,
@@ -229,6 +234,9 @@ sub make_command
 
     $mode |= DRYRUN if $dryrun;
 
+    # torque defaults to start from homedir
+    $defaults->{chdir} = $ENV{HOME};
+
     if ($ARGV[0]) {
         $script = shift(@ARGV);
         $defaults->{J} = basename($script) if ! $job_name;
@@ -282,7 +290,7 @@ sub make_command
     # The interactive sub-command (is added to regular command in both cases)
     my @intcommand;
 
-    if ($interactive) {
+    if ($interactive || $fake) {
         $mode |= INTERACTIVE;
         @command = (which(SALLOC));
         @intcommand = (which('srun'), '--pty');
@@ -290,38 +298,36 @@ sub make_command
         $defaults->{'cpu-bind'} = 'v,none';
 
         # Always want at least one node in the allocation
-        if (!$node_opts->{node_cnt}) {
+        if (!$node_opts->{node_cnt} && !$fake) {
             $node_opts->{node_cnt} = 1;
         }
 
         # Calculate the task count based of the node cnt and the amount
         # of ppn's in the request
-        if ($node_opts->{task_cnt}) {
+        if ($node_opts->{task_cnt} && (!$fake || $node_opts->{node_cnt})) {
             $node_opts->{task_cnt} *= $node_opts->{node_cnt};
-        }
-
-        if (!$node_opts->{node_cnt} && !$node_opts->{task_cnt} && !$node_opts->{hostlist}) {
-            $node_opts->{task_cnt} = 1;
         }
     } else {
         @command = (which(SBATCH));
 
         if (!$join_output) {
             if ($err_path) {
+                $err_path = getcwd . "/err_path" if $err_path !~ m{^/};
                 push(@command, "-e", $err_path);
             } else {
                 # jobname will be forced
-                my $path = "%x.e%A";
+                my $path = getcwd . "/%x.e%A";
                 $path .= ".%a" if $array;
                 $defaults->{e} = $path;
             }
         }
 
         if ($out_path) {
+            $out_path = getcwd . "/out_path" if $out_path !~ m{^/};
             push(@command, "-o", $out_path);
         } else {
             # jobname is forced
-            my $path = "%x.o%A";
+            my $path = getcwd . "/%x.o%A";
             $path .= ".%a" if $array;
             $defaults->{o} = $path;
         }
@@ -546,7 +552,7 @@ sub parse_script
         # mixed with otehr opts etc etc
         foreach my $pbsopt (qw(e o N)) {
             my $opts = $map{$pbsopt} || [$pbsopt];
-            my $pat = '^\s*#PBS.*?\s-'.$pbsopt.'\s\S';
+            my $pat = '^\s*#PBS.*?\s-'.$pbsopt.'\s+\S';
             if ($line =~ m/$pat/) {
                 foreach my $opt (@$opts) {
                     $set{$opt} = 1
@@ -594,9 +600,20 @@ sub main
     if (!($mode & INTERACTIVE)) {
         my $stdout;
 
+        if ($script && !-f $script) {
+            fatal("No jobscript $script");
+        }
+
         if ($sf) {
+            # script or no script
             $stdin = run_submitfilter($sf, $script, \@orig_args);
-        } elsif (!$script) {
+        } elsif ($script) {
+            open(my $fh, '<', $script);
+            while (<$fh>) {
+                $stdin .= $_;
+            }
+            close($fh);
+        } else {
             # read from input
             while (<STDIN>) {
                 $stdin .= $_;
