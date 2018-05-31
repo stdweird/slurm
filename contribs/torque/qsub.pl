@@ -531,9 +531,17 @@ sub parse_script
     }
 
     # replace PBS_JOBID in -o / -e
+    #   torque sets stdout/err in cwd -> so force abspath like done above
     # All script changes here
     foreach my $line (@lines) {
-        $line =~ s/\$\{?PBS_JOBID\}?/%A/g if $line =~ m/^\s*#PBS.*?\s-[oe](\s|$)/;
+        if ($line =~ m/^\s*(#PBS.*?\s-[oe])(?:\s*(\S+)(.*))?$/) {
+            if ($2 !~ m{^/}) {
+                $line = "$1 ".getcwd."/$2$3";
+            }
+
+            $line =~ s/\$\{?PBS_JOBID\}?/%A/g;
+        }
+
         $newtxt .= "$line\n";
     };
 
