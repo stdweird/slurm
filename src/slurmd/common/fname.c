@@ -37,6 +37,7 @@
 \*****************************************************************************/
 #include <ctype.h>
 #include <fcntl.h>
+#include <libgen.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -309,6 +310,7 @@ static void _batch_path_check(char **p, char **q, char **name,
 			      int taskid)
 {
 
+    char *jobname, *jobnamecopy;
 	switch (**p) {
 	case 'a':  /* '%a' => array task id   */
 		xmemcat(*name, *q, *p - 1);
@@ -359,7 +361,20 @@ static void _batch_path_check(char **p, char **q, char **name,
 		xstrfmtcat(*name, "%s", job->user_name);
 		*q = ++(*p);
 		break;
-	case 'x':  /* '%x' => job name       */
+	case 'x':  /* '%x' => (basename of) job name       */
+		xmemcat(*name, *q, *p - 1);
+        jobname = getenvp(job->env, "SLURM_JOB_NAME");
+        if (jobname != NULL) {
+            jobnamecopy = strdup(jobname);
+            xstrfmtcat(*name, "%s", basename(jobnamecopy));
+            xfree(jobnamecopy);
+            jobnamecopy = NULL;
+        }
+		*q = ++(*p);
+        xfree(jobname);
+        jobname = NULL;
+		break;
+	case 'X':  /* '%X' => literal job name */
 		xmemcat(*name, *q, *p - 1);
 		xstrfmtcat(*name, "%s", getenvp(job->env, "SLURM_JOB_NAME"));
 		*q = ++(*p);

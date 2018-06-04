@@ -37,6 +37,7 @@
 \*****************************************************************************/
 
 #include <ctype.h>
+#include <libgen.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -67,7 +68,7 @@ extern fname_t *fname_create(srun_job_t *job, char *format, int task_count)
 	unsigned int wid     = 0;
 	unsigned long int taskid  = 0;
 	fname_t *fname = NULL;
-	char *p, *q, *name, *tmp_env, *tmp_perc;
+	char *p, *q, *name, *tmp_env, *tmp_perc, *jobname, *jobnamecopy;;
 	uint32_t array_job_id  = job->jobid;
 	uint32_t array_task_id = NO_VAL;
 	char *esc;
@@ -216,6 +217,19 @@ extern fname_t *fname_create(srun_job_t *job, char *format, int task_count)
 				p++;
 				break;
 			case 'x':
+				xmemcat(name, q, p - 1);
+                jobname = getenvp(job->env, "SLURM_JOB_NAME");
+                if (jobname != NULL) {
+                    jobnamecopy = strdup(jobname);
+                    xstrfmtcat(name, "%s", basename(jobnamecopy));
+                    xfree(jobnamecopy);
+                    jobnamecopy = NULL;
+                }
+				q = ++p;
+                xfree(jobname);
+                jobname = NULL;
+				break;
+			case 'X':
 				xmemcat(name, q, p - 1);
 				xstrfmtcat(name, "%s", getenv("SLURM_JOB_NAME"));
 				q = ++p;

@@ -1701,7 +1701,10 @@ separate IO file per task.
 User name.
 .TP
 \fB%x\fR
-Job name.
+Job name (technically basename of job name, in case "/" is used in the name).
+.TP
+\fB%X\fR
+Literal job name (may include "/").
 .PP
 A number placed between the percent character and format specifier may be
 used to zero\-pad the result in the IO filename. This number is ignored if
