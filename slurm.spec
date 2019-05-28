@@ -1,6 +1,6 @@
 Name:		slurm
 Version:	19.05.0
-%define rel	ug-0rc1
+%define rel	ug-0rc2
 Release:	%{rel}%{?dist}
 Summary:	Slurm Workload Manager
 
@@ -58,12 +58,14 @@ Source:		%{slurm_source_dir}.tar.gz
 %bcond_without pam
 
 Requires: munge
+Requires: json-c12
 
 %{?systemd_requires}
 BuildRequires: systemd
 BuildRequires: munge-devel munge-libs
 BuildRequires: python
 BuildRequires: readline-devel
+BuildRequires: json-c12-devel
 Obsoletes: slurm-lua slurm-munge slurm-plugins
 
 # fake systemd support when building rpms on other platforms
