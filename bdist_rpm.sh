@@ -3,7 +3,7 @@
 VERSION=`grep "Version:.*[0-9]" slurm.spec | tr -s " " |  awk '{print $2;}'`
 RELEASE=`grep "%global rel.*[-1-9]" slurm.spec | tr -s " " | awk '{print $3}'`
 
-if [ ${RELEASE} -gt 1 ]; then
+if [ ${RELEASE} != "1" ]; then
     SUFFIX=${VERSION}-${RELEASE}
 else
     SUFFIX=${VERSION}
