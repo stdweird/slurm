@@ -1317,8 +1317,12 @@ static int _job_test(struct job_record *job_ptr, bitstr_t *node_bitmap,
 		}
 	}
 
-	/* This is the case if -O/--overcommit is true */
-	if (details_ptr->min_cpus == details_ptr->min_nodes) {
+	/*
+	 * Ensure sufficient resources to satisfy thread/core/socket
+	 * specifications with -O/--overcommit option.
+	 */
+	if (details_ptr->overcommit &&
+	    (details_ptr->min_cpus == details_ptr->min_nodes)) {
 		struct multi_core_data *mc_ptr = details_ptr->mc_ptr;
 
 		if ((mc_ptr->threads_per_core != NO_VAL16) &&
@@ -6638,7 +6642,13 @@ static time_t _guess_job_end(struct job_record * job_ptr, time_t now)
 	if (over_time_limit == 0) {
 		end_time = job_ptr->end_time + slurmctld_conf.kill_wait;
 	} else if (over_time_limit == INFINITE16) {
-		end_time = now + (365 * 24 * 60 * 60);	/* one year */
+		/* No idea when the job might end, this is just a guess */
+		if (job_ptr->time_limit && (job_ptr->time_limit != NO_VAL) &&
+		    (job_ptr->time_limit != INFINITE)) {
+			end_time = now + (job_ptr->time_limit * 60);
+		} else {
+			end_time = now + (365 * 24 * 60 * 60);	/* one year */
+		}
 	} else {
 		end_time = job_ptr->end_time + slurmctld_conf.kill_wait +
 			   (over_time_limit  * 60);

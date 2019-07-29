@@ -314,7 +314,7 @@ static int _job_fail_account(struct job_record *job_ptr, const char *func_name)
 		 */
 
 		/*
-		 * Clear ptrs so that only assocation usage is removed.
+		 * Clear ptrs so that only association usage is removed.
 		 * Otherwise qos and partition limits will be double accounted
 		 * for when this job finishes. Don't do this for acrrual time,
 		 * it has be on both because the job is ineligible and can't
@@ -7075,7 +7075,7 @@ static int _job_create(job_desc_msg_t *job_desc, int allocate, int will_run,
 
 	/*
 	 * Do this last,after other TRES' have been set as it uses the other
-	 * values to calcuate the billing value.
+	 * values to calculate the billing value.
 	 */
 	job_desc->tres_req_cnt[TRES_ARRAY_BILLING] =
 		assoc_mgr_tres_weighted(job_desc->tres_req_cnt,
