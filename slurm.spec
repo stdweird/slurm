@@ -1,7 +1,7 @@
 Name:		slurm
 Version:	19.05.1
-%global rel	ug.2
-Release:	%{rel}%{?dist}
+%global rel    1
+Release:    %{rel}%{gittag}%{?dist}.ug
 Summary:	Slurm Workload Manager
 
 Group:		System Environment/Base
