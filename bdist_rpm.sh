@@ -15,6 +15,7 @@ mkdir -p BUILD SOURCES SPECS RPMS BUILDROOT
 git archive --format=tar.gz -o "SOURCES/slurm-${SUFFIX}.tar.gz" --prefix="slurm-${SUFFIX}/" HEAD
 cp slurm.spec "SPECS"
 
-sudo yum install -y nvidia-driver-NVML ucx-devel pmix-devel numactl-devel hwloc-devel
+# nvidia-driver-devel provides the libnividia-ml.so symlnk, the real .so.1 comes from nvidia-driver-NVML
+sudo yum install -y nvidia-driver-devel ucx-devel pmix-devel numactl-devel hwloc-devel
 # there's no option to pass nvml, it is only autodetected
 rpmbuild --define "gittag ${GITTAG}" --define "_topdir $PWD" --with numa --with pmix --with hwloc --with x11 --with ucx -ba SPECS/slurm.spec
