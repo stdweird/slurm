@@ -325,7 +325,6 @@ notifies slurm about failed nodes.
 	%{?_without_x11:--disable-x11} \
 	%{?_with_ucx} \
 	%{?_with_cflags}
-	%{?_with_x11}
 
 make %{?_smp_mflags}
 
