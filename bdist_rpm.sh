@@ -15,7 +15,20 @@ mkdir -p BUILD SOURCES SPECS RPMS BUILDROOT
 git archive --format=tar.gz -o "SOURCES/slurm-${SUFFIX}.tar.gz" --prefix="slurm-${SUFFIX}/" HEAD
 cp slurm.spec "SPECS"
 
-# nvidia-driver-devel provides the libnividia-ml.so symlnk, the real .so.1 comes from nvidia-driver-NVML
-sudo yum install -y nvidia-driver-devel ucx-devel pmix-devel numactl-devel hwloc-devel
 # there's no option to pass nvml, it is only autodetected
-rpmbuild --define "gittag ${GITTAG}" --define "_topdir $PWD" --with numa --with pmix --with hwloc --with x11 --with ucx -ba SPECS/slurm.spec
+# nvidia-driver-devel provides the libnividia-ml.so symlnk, the real .so.1 comes from nvidia-driver-NVML
+# cuda-nvml-dev provides the nvml.h (put is part of the cuda rpms so has cud version in the name, hence the *)
+# however, it's not in the default include paths nor the slurm hardcoded ones, so use CPATH
+# nvml api is not really cuda specific, last API is from cuda 5, so any recent cuda will do
+
+# TODO: what if more than one cuda is available/installed, then the * thingies will probably not work
+sudo yum install -y nvidia-driver-devel cuda-nvml-dev-* ucx-devel pmix-devel numactl-devel hwloc-devel
+
+# glob expansion in list
+nvmls=(/usr/local/cuda*/targets/x86_64-linux/include)
+if [ "${#nvmls[@]}" -ne 1 ]; then
+    echo "0 or more than one nvml.h found: ${nvmls[@]}. Unsupported."
+    exit 1
+fi
+
+rpmbuild --define "gittag ${GITTAG}" --define "_topdir $PWD" --with numa --with pmix --with hwloc --with x11 --with ucx -ba SPECS/slurm.spec --define "_configure ./configure CPATH=${nvmls[0]}" --define "_smp_mflags CPATH=${nvmls[0]}"
