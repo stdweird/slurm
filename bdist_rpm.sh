@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 VERSION=`grep "Version:.*[0-9]" slurm.spec | tr -s " " |  awk '{print $2;}'`
 RELEASE=`grep "%global rel.*[-1-9]" slurm.spec | tr -s " " | awk '{print $3}'`
 
@@ -22,7 +24,8 @@ cp slurm.spec "SPECS"
 # nvml api is not really cuda specific, last API is from cuda 5, so any recent cuda will do
 
 # TODO: what if more than one cuda is available/installed, then the * thingies will probably not work
-sudo yum install -y nvidia-driver-devel cuda-nvml-dev-* ucx-devel pmix-devel numactl-devel hwloc-devel
+# pmix-3 as rebuild from github src.rpm includes the devel rpms in the rpm
+sudo yum install -y nvidia-driver-devel cuda-nvml-dev-* ucx-devel pmix-devel-3.* numactl-devel hwloc-devel
 
 # glob expansion in list
 nvmls=(/usr/local/cuda*/targets/x86_64-linux/include)
