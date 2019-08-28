@@ -223,7 +223,8 @@ Requires: %{name}%{?_isa} = %{version}-%{release}
 Requires: pmix = %{pmix_version}
 %endif
 %if %{with ucx}
-Requires: ucx = %{ucx_version}
+# only the devel rpm from EPEL provides the reuqired .so files
+Requires: ucx-devel = %{ucx_version}
 %endif
 %description slurmd
 Slurm compute node daemon. Used to launch jobs on compute nodes
