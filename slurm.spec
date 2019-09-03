@@ -126,7 +126,7 @@ BuildRequires: numactl-devel
 
 %if %{with pmix}
 BuildRequires: pmix
-%global pmix %(rpm -q pmix --qf "%{VERSION}")
+%global pmix_version %(rpm -q pmix --qf "%{VERSION}")
 %endif
 
 %if %{with ucx}
@@ -223,7 +223,8 @@ Requires: %{name}%{?_isa} = %{version}-%{release}
 Requires: pmix = %{pmix_version}
 %endif
 %if %{with ucx}
-Requires: ucx = %{ucx_version}
+# only the devel rpm from EPEL provides the reuqired .so files
+Requires: ucx-devel = %{ucx_version}
 %endif
 %description slurmd
 Slurm compute node daemon. Used to launch jobs on compute nodes
@@ -325,7 +326,6 @@ notifies slurm about failed nodes.
 	%{?_without_x11:--disable-x11} \
 	%{?_with_ucx} \
 	%{?_with_cflags}
-	%{?_with_x11}
 
 make %{?_smp_mflags}
 

@@ -65,7 +65,8 @@
 #include "slurm/slurm.h"
 #include "src/common/slurm_xlator.h"
 #include "src/common/slurm_protocol_api.h"
-#include "src/slurmd/common/xcgroup.h"
+#include "src/common/xcgroup_read_config.h"
+#include "src/slurmd/common/xcgroup.c"
 
 /* This definition would probably be good to centralize somewhere */
 #ifndef MAXHOSTNAMELEN
@@ -96,7 +97,7 @@ static struct {
 	log_level_t log_level;
 	char *node_name;
 	bool disable_x11;
-	char *pam_service;
+  	char *pam_service;
 } opts;
 
 static void _init_opts(void)
@@ -338,11 +339,15 @@ static int _action_unknown(pam_handle_t *pamh, struct passwd *pwd, List steps)
 			else
 				return PAM_PERM_DENIED;
 		}
+		if (opts.action_adopt_failure == CALLERID_ACTION_ALLOW)
+			return PAM_SUCCESS;
+		else
+			return PAM_PERM_DENIED;
+	} else {
+		/* This pam module was worthless, apparently */
+		debug("_indeterminate_multiple failed to find a job to adopt this into");
+		return rc;
 	}
-
-	/* This pam module was worthless, apparently */
-	debug("_indeterminate_multiple failed to find a job to adopt this into");
-	return rc;
 }
 
 /* _user_job_count returns the count of jobs owned by the user AND sets job_id
@@ -620,14 +625,17 @@ static void _log_init(log_level_t level)
 	log_init(PAM_MODULE_NAME, logopts, LOG_AUTHPRIV, NULL);
 }
 
-static int _load_cgroup_config()
-{
-    if (xcgroup_get_slurm_cgroup_conf() != SLURM_SUCCESS) {
-		info("read_slurm_cgroup_conf failed");
-		return SLURM_ERROR;
-	}
-	return SLURM_SUCCESS;
-}
+/* static int _load_cgroup_config() */
+/* { */
+/*         slurm_cgroup_conf = xmalloc(sizeof(slurm_cgroup_conf_t)); */
+/*         memset(slurm_cgroup_conf, 0, sizeof(slurm_cgroup_conf_t)); */
+/*         if (read_slurm_cgroup_conf(slurm_cgroup_conf) != SLURM_SUCCESS) { */
+/*                 info("read_slurm_cgroup_conf failed"); */
+/*                 return SLURM_ERROR; */
+/*         } */
+/*         return SLURM_SUCCESS; */
+/* } */
+
 
 /* Make sure to only continue if we're running in the sshd context
  *
@@ -663,10 +671,7 @@ static int check_pam_service(pam_handle_t *pamh)
 	return PAM_IGNORE;
 }
 
-/* Parse arguments, etc then get my socket address/port information. 
-/* Parse arguments, etc then get my socket address/port information.
- * Always check if the user has a job on the node, otherwise deny access.
- * If action_adopt=check_only, do not adopt the job, otherwise attempt to
+/* Parse arguments, etc then get my socket address/port information. Attempt to
  * adopt this process into a job in the following order:
  * 	1) If the user has only one job on the node, pick that one
  * 	2) Send RPC to source IP of socket. If there is a slurmd at the IP
@@ -674,8 +679,8 @@ static int check_pam_service(pam_handle_t *pamh)
  *	3) Pick a job semi-randomly (default) or skip the adoption (if
  *		configured)
  */
-int _adopt_and_or_check(pam_handle_t *pamh, int flags
-				__attribute__((unused)), int argc, const char **argv) {
+PAM_EXTERN int _adopt_and_or_check(pam_handle_t *pamh, int flags
+				__attribute__((unused)), int argc, const char **argv) { 
 
 	int retval = PAM_IGNORE, rc = PAM_IGNORE, slurmrc, bufsize, user_jobs;
 	char *user_name;
@@ -683,7 +688,8 @@ int _adopt_and_or_check(pam_handle_t *pamh, int flags
 	step_loc_t *stepd = NULL;
 	struct passwd pwd, *pwd_result;
 	char *buf = NULL;
-
+        slurm_cgroup_conf_t *cg_conf;
+	
 	_init_opts();
 	_parse_opts(pamh, argc, argv);
 
@@ -751,12 +757,24 @@ int _adopt_and_or_check(pam_handle_t *pamh, int flags
 		xfree(buf);
 		return PAM_SESSION_ERR;
 	}
+	if (opts.action_adopt==CALLERID_ACTION_ADOPT_AND_CHECK ){
+	   cg_conf = xcgroup_get_slurm_cgroup_conf();
+	}
 
-	if (opts.action_adopt==CALLERID_ACTION_ADOPT_AND_CHECK
-	    && _load_cgroup_config() != SLURM_SUCCESS)
-		return rc;
 
-	/* Check if there are any steps on the node from any user. A failure here
+	/* Ignoring root is probably best but the admin can allow it */
+	if (pwd.pw_uid == 0) {
+		if (opts.ignore_root) {
+			info("Ignoring root user");
+			return PAM_IGNORE;
+		} else {
+			/* This administrator is crazy */
+			info("Danger!!! This is a connection attempt by root (user id 0) and ignore_root=0 is set! Hope for the best!");
+		}
+	}
+
+	/*
+	 * Check if there are any steps on the node from any user. A failure here
 	 * likely means failures everywhere so exit on failure or if no local jobs
 	 * exist. This can also happen if SlurmdSpoolDir cannot be found, or if
 	 * the NodeName cannot be established for some reason.
@@ -797,12 +815,12 @@ int _adopt_and_or_check(pam_handle_t *pamh, int flags
 					(opts.action_adopt_failure ==
 					CALLERID_ACTION_ALLOW))
 					rc = PAM_SUCCESS;
-                else {
-                    send_user_msg(pamh, "Access denied by "
-                                  PAM_MODULE_NAME
-                                  ": failed to adopt process into cgroup, denying access because action_adopt_failure=deny");
-                    rc = PAM_PERM_DENIED;
-                }
+				else{
+				  send_user_msg(pamh, "Access denied by "
+						PAM_MODULE_NAME
+					      ": failed to adopt process into cgroup, denying access because action_adopt_failure=deny");
+				  rc = PAM_PERM_DENIED;
+				}
 			} else {
 				rc = PAM_SUCCESS;
 			}
@@ -821,8 +839,7 @@ int _adopt_and_or_check(pam_handle_t *pamh, int flags
 
 	/* The source of the connection either didn't reply or couldn't
 	 * determine the job ID at the source. Proceed to action_unknown */
-	if (rc != PAM_SUCCESS)
-		rc = _action_unknown(pamh, &pwd, steps);
+	rc = _action_unknown(pamh, &pwd, steps);
 
 cleanup:
 	FREE_NULL_LIST(steps);
@@ -852,7 +869,8 @@ PAM_EXTERN int pam_sm_close_session(pam_handle_t *pamh, int flags
 }
 
 
-
+/* Implementation for the pam_acct_mgmt API call. 
+ */
 PAM_EXTERN int pam_sm_acct_mgmt(pam_handle_t *pamh, int flags
 				__attribute__((unused)), int argc, const char **argv)
 {
