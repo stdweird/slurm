@@ -1,6 +1,52 @@
 This file describes changes in recent versions of Slurm. It primarily
 documents those changes that are of interest to users and administrators.
 
+* Changes in Slurm 19.05.2
+==========================
+ -- Wrap END_TIMER{,2,3} macro definition in "do {} while (0)" block.
+ -- Allow account coordinators to add users who don't already have an
+    association with any account.
+ -- If only allowing particular alloc nodes in a partition, deny any request
+    coming from an alloc node of NULL.
+ -- Prevent partial-load of plugins which can leave certain interfaces in
+    an inconsistent state.
+ -- Remove stray __USE_GNU macro definitions from source.
+ -- Fix loading fed state by backup on subsequent takeovers.
+ -- Add missing job read lock when loading fed job state.
+ -- Add missing fed_job_info jobs if fed state is lost.
+ -- Do not build cgroup plugins on FreeBSD or NetBSD, and use proctrack/pgid
+    by default instead.
+ -- Do not build switch/cray_aries plugin on FreeBSD, NetBSD, or macOS.
+ -- Fix build on FreeBSD.
+ -- Fix race condition in route/topology plugin.
+ -- In munge decode set the alloc_node field to the text representation of an
+    IP address if the reverse lookup fails.
+ -- Fix infinite loop in slurmstepd handling for nss_slurm REQUEST_GETGR RPC.
+ -- Fix slurmstepd early assertion fail which prevented batch job launch or
+    tasks launch on non-Linux systems.
+ -- Fix regression with SLURM_STEP_GPUS env var being renamed SLURM_STEP_GRES.
+ -- Fix pmix v3 linking if no rpath is allowed on build.
+ -- Fix sacctmgr error handling when removing associations and users.
+ -- Allow sacctmgr to add users to WCKeys without having TrackWCKey set in the
+    slurm.conf.
+ -- Allow sacctmgr to delete WCKeys from users.
+ -- Change GRES type set by gpu/gpu_nvml plugin to be more specific - based
+    on device name instead of brand name.
+ -- cli_filter - fix logic error with option lookup functions.
+ -- Fix bad testing of NodeFeatures debug flag in contribs/cray.
+ -- Cleanup track_script code to avoid race conditions and invalid memory
+    access.
+ -- Fix jobs being killed after being requeued by preemption.
+ -- Make register nodes verify correctly when using cons_tres.
+ -- Fix srun --mem-per-cpu being ignored.
+ -- Fix segfault in _update_job() under certain conditions.
+ -- job_submit/lua - restore slurm.FAILURE as a synonym for slurm.ERROR.
+
+* Changes in Slurm 19.05.1-2
+============================
+ -- Fix mistake in QOS time limit calculations for UsageFactor != 0 with any
+    combination of flags set.
+
 * Changes in Slurm 19.05.1
 ==========================
  -- accounting_storage/mysql - fix incorrect function names in error messages.
@@ -24,6 +70,28 @@ documents those changes that are of interest to users and administrators.
  -- jobcomp/elasticsearch - fix minor race related to JobCompLoc setup.
  -- For HetJobs, ensure SLURM_PACK_JOB_ID is set regardless of whether
     PrologFlags=Alloc is enabled.
+ -- Fix PriorityFlags regression with the mutation of FAIR_TREE to NO_FAIR_TREE.
+ -- select/cons_res - fix debug flag SelectType handling in select_p_job_test.
+ -- Fix sacctmgr archive dump commit confirmation.
+ -- Prevent extra resources from being allocated when combining certain flags.
+ -- Cray - fix template generator with update cray_aries plugin names.
+ -- accounting_storage/slurmdbd - provide additional detail in several error
+    messages.
+ -- Backfill - If a job has a time_limit guess the end time of a job better
+    if OverTimeLimit is Unlimited.
+ -- Remove premature call to get system gpus before querying fake gpus that
+    should override the real.
+ -- Fix segfault in epilog_set_env() when gres_devices is NULL.
+ -- Fix (un)supported states in sacct.
+ -- Adjust build system to no longer use the AC_FUNC_MALLOC autoconf macro.
+ -- srun - restore the --cpu_bind option to srun.
+ -- Add UsageFactorSafe QOS flag to control applying UsageFactor at
+    submission/scheduling time.
+ -- Create missing reservations on DBD_MODIFY_RESV.
+ -- Add error message when attempting to update association manager and object
+    doesn't exist.
+ -- Fix security issue in accounting_storage/mysql plugin on archive file loads
+    by always escaping strings within the slurmdbd. CVE-2019-12838.
 
 * Changes in Slurm 19.05.0
 ==========================
@@ -108,6 +176,8 @@ documents those changes that are of interest to users and administrators.
  -- Fix seff human readable memory string for values below a megabyte.
  -- Avoid slurmctld abort if GRES defined in gres.conf, but not in the node
     configuration of slurm.conf.
+ -- Calculate task count for job with --gpus-per-task option, but no explicit
+    task count.
 
 * Changes in Slurm 19.05.0rc1
 =============================
@@ -307,6 +377,10 @@ documents those changes that are of interest to users and administrators.
  -- Make it so we set the alloc_node in a resource allocation based on the auth
     plugin instead of the rpc call.
 
+* Changes in Slurm 18.08.9
+==========================
+ -- Wrap END_TIMER{,2,3} macro definition in "do {} while (0)" block.
+
 * Changes in Slurm 18.08.8
 ==========================
  -- Update "xauth list" to use the same 10000ms timeout as the other xauth
@@ -377,6 +451,11 @@ documents those changes that are of interest to users and administrators.
  -- Fix dump/load of rejected heterogeneous jobs.
  -- For heterogeneous jobs, do not count the each component against the QOS or
     association job limit multiple times.
+ -- slurmdbd - avoid reservation flag column corruption with the use of newer
+    flags, instead preserve the older flag fields that we can still fit in the
+    smallint field, and discard the rest.
+ -- Fix security issue in accounting_storage/mysql plugin on archive file loads
+    by always escaping strings within the slurmdbd. CVE-2019-12838.
 
 * Changes in Slurm 18.08.7
 ==========================

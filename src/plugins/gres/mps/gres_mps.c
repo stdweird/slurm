@@ -588,9 +588,9 @@ static void _set_env(char ***env_ptr, void *gres_ptr, int node_inx,
 	int global_id = -1;
 
 	if (is_job)
-		slurm_env_var = "SLURM_JOB_GRES";
+		slurm_env_var = "SLURM_JOB_GPUS";
 	else
-		slurm_env_var = "SLURM_STEP_GRES";
+		slurm_env_var = "SLURM_STEP_GPUS";
 
 	if (*already_seen) {
 		global_list = xstrdup(getenvp(*env_ptr, slurm_env_var));
@@ -847,6 +847,9 @@ extern void epilog_set_env(char ***epilog_env_ptr,
 	xassert(epilog_env_ptr);
 
 	if (!epilog_info)
+		return;
+
+	if (!gres_devices)
 		return;
 
 	if (node_inx > epilog_info->node_cnt) {

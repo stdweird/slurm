@@ -314,7 +314,7 @@ static int _job_fail_account(struct job_record *job_ptr, const char *func_name)
 		 */
 
 		/*
-		 * Clear ptrs so that only assocation usage is removed.
+		 * Clear ptrs so that only association usage is removed.
 		 * Otherwise qos and partition limits will be double accounted
 		 * for when this job finishes. Don't do this for acrrual time,
 		 * it has be on both because the job is ineligible and can't
@@ -7075,7 +7075,7 @@ static int _job_create(job_desc_msg_t *job_desc, int allocate, int will_run,
 
 	/*
 	 * Do this last,after other TRES' have been set as it uses the other
-	 * values to calcuate the billing value.
+	 * values to calculate the billing value.
 	 */
 	job_desc->tres_req_cnt[TRES_ARRAY_BILLING] =
 		assoc_mgr_tres_weighted(job_desc->tres_req_cnt,
@@ -13996,14 +13996,17 @@ extern int update_job_str(slurm_msg_t *msg, uid_t uid)
 		} else if (bit_super_set(job_ptr->array_recs->task_id_bitmap,
 					 array_bitmap)) {
 			/* Update the record with all pending tasks */
+			tmp_bitmap =
+				bit_copy(job_ptr->array_recs->task_id_bitmap);
 			rc2 = _update_job(job_ptr, job_specs, uid);
 			if (rc2 == ESLURM_JOB_SETTING_DB_INX) {
+				FREE_NULL_BITMAP(tmp_bitmap);
 				rc = rc2;
 				goto reply;
 			}
 			_resp_array_add(&resp_array, job_ptr, rc2);
-			bit_and_not(array_bitmap,
-				    job_ptr->array_recs->task_id_bitmap);
+			bit_and_not(array_bitmap, tmp_bitmap);
+			FREE_NULL_BITMAP(tmp_bitmap);
 		} else {
 			/* Need to split out tasks to separate job records */
 			tmp_bitmap = bit_copy(job_ptr->array_recs->
@@ -15160,6 +15163,7 @@ void batch_requeue_fini(struct job_record  *job_ptr)
 	job_ptr->end_time_exp = job_ptr->end_time = 0;
 	job_ptr->total_cpus = 0;
 	job_ptr->pre_sus_time = 0;
+	job_ptr->preempt_time = 0;
 	job_ptr->suspend_time = 0;
 	job_ptr->tot_sus_time = 0;
 	/* Current code (<= 2.1) has it so we start the new job with the next

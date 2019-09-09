@@ -3704,6 +3704,9 @@ extern int assoc_mgr_update_assocs(slurmdb_update_object_t *update, bool locked)
 		switch(update->type) {
 		case SLURMDB_MODIFY_ASSOC:
 			if (!rec) {
+				error("SLURMDB_MODIFY_ASSOC: assoc %u(%s, %s, %s) not found, unable to update.",
+				     object->id, object->acct,
+				     object->user, object->partition);
 				rc = SLURM_ERROR;
 				break;
 			}
@@ -4215,6 +4218,8 @@ extern int assoc_mgr_update_wckeys(slurmdb_update_object_t *update, bool locked)
 		switch(update->type) {
 		case SLURMDB_MODIFY_WCKEY:
 			if (!rec) {
+				error("SLURMDB_MODIFY_WCKEY: wckey %u(%s) not found, unable to update.",
+				     object->id, object->name);
 				rc = SLURM_ERROR;
 				break;
 			}
@@ -4305,6 +4310,9 @@ extern int assoc_mgr_update_users(slurmdb_update_object_t *update, bool locked)
 		switch(update->type) {
 		case SLURMDB_MODIFY_USER:
 			if (!rec) {
+				error("SLURMDB_MODIFY_USER: user %s not found, unable to update.",
+				      object->old_name ?
+				      object->old_name : object->name);
 				rc = SLURM_ERROR;
 				break;
 			}
@@ -4465,6 +4473,8 @@ extern int assoc_mgr_update_qos(slurmdb_update_object_t *update, bool locked)
 			break;
 		case SLURMDB_MODIFY_QOS:
 			if (!rec) {
+				error("SLURMDB_MODIFY_QOS: qos %u(%s) not found, unable to update.",
+				      object->id, object->name);
 				rc = SLURM_ERROR;
 				break;
 			}
@@ -6530,12 +6540,13 @@ extern void assoc_mgr_get_default_qos_info(
 	return;
 }
 
-/* Calcuate a weighted tres value.
+/*
+ * Calculate a weighted tres value.
  * IN: tres_cnt - array of tres values of size g_tres_count.
  * IN: weights - weights to apply to tres values of size g_tres_count.
  * IN: flags - priority flags (toogle between MAX or SUM of tres).
  * IN: locked - whether the tres read assoc mgr lock is locked or not.
- * RET: returns the calcuated tres weight.
+ * RET: returns the calculated tres weight.
  */
 extern double assoc_mgr_tres_weighted(uint64_t *tres_cnt, double *weights,
 				      uint16_t flags, bool locked)

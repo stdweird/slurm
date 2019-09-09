@@ -133,6 +133,7 @@ EXTRA_DIST = \
 	test1.113			\
 	test1.114			\
 	test1.115			\
+	test1.116			\
 	test2.1				\
 	test2.2				\
 	test2.3				\
@@ -657,6 +658,7 @@ EXTRA_DIST = \
 	test39.21			\
 	test39.21.prog.cu		\
 	test39.22			\
+	test39.23			\
 	test40.1			\
 	test40.2			\
 	test40.3			\
