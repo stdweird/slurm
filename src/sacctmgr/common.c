@@ -723,16 +723,28 @@ static print_field_t *_get_print_field(char *object)
 		field->name = xstrdup("Time");
 		field->len = 19;
 		field->print_routine = print_fields_date;
+	} else if (!xstrncasecmp("TimeEligible", object, MAX(command_len, 6)) ||
+		   !xstrncasecmp("Eligible", object, MAX(command_len, 2))) {
+		field->type = PRINT_TIMEELIGIBLE;
+		field->name = xstrdup("TimeEligible");
+		field->len = 19;
+		field->print_routine = print_fields_date;
+	} else if (!xstrncasecmp("TimeEnd", object, MAX(command_len, 6)) ||
+		   !xstrncasecmp("End", object, MAX(command_len, 2))) {
+		field->type = PRINT_TIMEEND;
+		field->name = xstrdup("TimeEnd");
+		field->len = 19;
+		field->print_routine = print_fields_date;
 	} else if (!xstrncasecmp("TimeStart", object, MAX(command_len, 7)) ||
 		   !xstrncasecmp("Start", object, MAX(command_len, 3))) {
 		field->type = PRINT_TIMESTART;
 		field->name = xstrdup("TimeStart");
 		field->len = 19;
 		field->print_routine = print_fields_date;
-	} else if (!xstrncasecmp("TimeEnd", object, MAX(command_len, 5)) ||
-		   !xstrncasecmp("End", object, MAX(command_len, 2))) {
-		field->type = PRINT_TIMEEND;
-		field->name = xstrdup("TimeEnd");
+	} else if (!xstrncasecmp("TimeSubmit", object, MAX(command_len, 6)) ||
+		   !xstrncasecmp("Submit", object, MAX(command_len, 2))) {
+		field->type = PRINT_TIMESUBMIT;
+		field->name = xstrdup("TimeSubmit");
 		field->len = 19;
 		field->print_routine = print_fields_date;
 	} else if (!xstrncasecmp("TRES", object,
@@ -817,6 +829,11 @@ extern int commit_check(char *warning)
 
 	printf("%s (You have 30 seconds to decide)\n", warning);
 	_nonblock(1);
+    /* Automation might introduce a newline after some previous answer.
+     * We will empty the input buffer before awaiting a new answer.
+     */
+    while((c = getchar()) != '\n' && c != EOF) { }
+
 	while(c != 'Y' && c != 'y'
 	      && c != 'N' && c != 'n'
 	      && c != '\n') {

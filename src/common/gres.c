@@ -3997,12 +3997,6 @@ static int _test_gres_cnt(gres_job_state_t *job_gres_data,
 			return -1;
 	}
 
-	/* gres_per_task requires task count specification */
-	if (job_gres_data->gres_per_task) {
-		if (*num_tasks == NO_VAL)
-			return -1;
-	}
-
 	/*
 	 * Ensure gres_per_job is multiple of gres_per_node
 	 * Ensure node count is consistent with GRES parameters
@@ -4420,6 +4414,15 @@ extern int gres_plugin_job_state_validate(char *cpus_per_tres,
 	if (!cpus_per_tres && !tres_per_job && !tres_per_node &&
 	    !tres_per_socket && !tres_per_task && !mem_per_tres)
 		return SLURM_SUCCESS;
+
+	if (tres_per_task && (*num_tasks == NO_VAL) &&
+	    (*min_nodes != NO_VAL) && (*min_nodes == *max_nodes)) {
+		/* Implicitly set task count */
+		if (*ntasks_per_node != NO_VAL16)
+			*num_tasks = *min_nodes * *ntasks_per_node;
+		else if (*cpus_per_task == NO_VAL16)
+			*num_tasks = *min_nodes;
+	}
 
 	if ((rc = gres_plugin_init()) != SLURM_SUCCESS)
 		return rc;
@@ -10347,7 +10350,7 @@ extern void gres_plugin_job_merge(List from_job_gres_list,
 
 	if (select_hetero == -1) {
 		/*
-		 * Determine if the select plugin supports heterogenous
+		 * Determine if the select plugin supports heterogeneous
 		 * GRES allocations (count differ by node): 1=yes, 0=no
 		 */
 		char *select_type = slurm_get_select_type();
@@ -10818,6 +10821,17 @@ extern void gres_plugin_job_state_log(List gres_list, uint32_t job_id)
 	slurm_mutex_unlock(&gres_context_lock);
 }
 
+static int _find_device(void *x, void *key)
+{
+	gres_device_t *device_x = (gres_device_t *)x;
+	gres_device_t *device_key = (gres_device_t *)key;
+
+	if (!xstrcmp(device_x->path, device_key->path))
+		return 1;
+
+	return 0;
+}
+
 extern List gres_plugin_get_allocated_devices(List gres_list, bool is_job)
 {
 	int i, j;
@@ -10825,15 +10839,15 @@ extern List gres_plugin_get_allocated_devices(List gres_list, bool is_job)
 	gres_state_t *gres_ptr;
 	bitstr_t **local_bit_alloc = NULL;
 	uint32_t node_cnt;
-	gres_device_t *gres_device;
+	gres_device_t *gres_device, *gres_device2;
 	List gres_devices;
 	List device_list = NULL;
 
 	(void) gres_plugin_init();
 
 	/*
-	 * Set up every device we have so we know.  This way we have the full
-	 * deny list and alter the alloc variable later if it were allocated.
+	 * Create a unique device list of all possible GRES device files.
+	 * Initialize each device to deny.
 	 */
 	for (j = 0; j < gres_context_cnt; j++) {
 		if (!gres_context[j].ops.get_devices)
@@ -10846,7 +10860,13 @@ extern List gres_plugin_get_allocated_devices(List gres_list, bool is_job)
 			if (!device_list)
 				device_list = list_create(NULL);
 			gres_device->alloc = 0;
-			list_append(device_list, gres_device);
+			/*
+			 * Keep the list unique by not adding duplicates (in the
+			 * case of MPS and GPU)
+			 */
+			if (!list_find_first(device_list, _find_device,
+					     gres_device))
+				list_append(device_list, gres_device);
 		}
 		list_iterator_destroy(dev_itr);
 	}
@@ -10904,8 +10924,23 @@ extern List gres_plugin_get_allocated_devices(List gres_list, bool is_job)
 		dev_itr = list_iterator_create(gres_devices);
 		i = 0;
 		while ((gres_device = list_next(dev_itr))) {
-			if (bit_test(local_bit_alloc[0], i))
+			if (bit_test(local_bit_alloc[0], i)) {
+				/*
+				 * search for the device among the unique
+				 * devices list (since two plugins could have
+				 * device records that point to the same file,
+				 * like with GPU and MPS)
+				 */
+				gres_device2 = list_find_first(device_list,
+							       _find_device,
+							       gres_device);
+				/*
+				 * Set both, in case they point to different
+				 * records
+				 */
 				gres_device->alloc = 1;
+				gres_device2->alloc = 1;
+			}
 			//info("%d is %d", i, gres_device->alloc);
 			i++;
 		}

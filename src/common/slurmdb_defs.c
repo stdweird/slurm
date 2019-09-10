@@ -427,6 +427,9 @@ static uint32_t _str_2_qos_flags(char *flags)
 	if (xstrcasestr(flags, "NoDecay"))
 		return QOS_FLAG_NO_DECAY;
 
+	if (xstrcasestr(flags, "UsageFactorSafe"))
+		return QOS_FLAG_USAGE_FACTOR_SAFE;
+
 	return 0;
 }
 
@@ -1935,6 +1938,8 @@ extern char *slurmdb_qos_flags_str(uint32_t flags)
 		xstrcat(qos_flags, "RequiresReservation,");
 	if (flags & QOS_FLAG_NO_DECAY)
 		xstrcat(qos_flags, "NoDecay,");
+	if (flags & QOS_FLAG_USAGE_FACTOR_SAFE)
+		xstrcat(qos_flags, "UsageFactorSafe,");
 
 	if (qos_flags)
 		qos_flags[strlen(qos_flags)-1] = '\0';
@@ -4487,4 +4492,27 @@ extern void slurmdb_destroy_slurmdb_stats(slurmdb_stats_t *stats)
 {
 	slurmdb_free_slurmdb_stats_members(stats);
 	xfree(stats);
+}
+
+/*
+ * Comparator for sorting jobs by submit time. 0 (unknown) submit time
+ * is mapped to INFINITE
+ */
+extern int slurmdb_job_sort_by_submit_time(void *v1, void *v2)
+{
+	time_t time1 = (*(slurmdb_job_rec_t **)v1)->submit;
+	time_t time2 = (*(slurmdb_job_rec_t **)v2)->submit;
+
+	/*
+	 * Sanity check submits should never be 0, but if somehow that does
+	 * happen treat it as the highest number.
+	 */
+	time1 = time1 ? time1 : INFINITE;
+	time2 = time2 ? time2 : INFINITE;
+
+	if (time1 < time2)
+		return -1;
+	else if (time1 > time2)
+		return 1;
+	return 0;
 }

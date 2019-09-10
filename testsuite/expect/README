@@ -221,6 +221,7 @@ test1.112  Test of --deadline and --begin option and time not changed
 test1.113  Test of --use-min-nodes option.
 test1.114  Test of srun --spread-job option.
 test1.115  Test of srun not hanging on ignored stdin.
+test1.116  Test of standalone srun not ignoring --mem-per-cpu
 
 test2.#    Testing of scontrol options (to be run as unprivileged user).
 ========================================================================
@@ -821,6 +822,7 @@ test39.19  Test accounting for GPU resources with various allocation options
 test39.20  Test GPU resource limits with various allocation options
 test39.21  Simple CUDA test
 test39.22  Test heterogeneous job GPU allocations.
+test39.23  Test --gpus-per-task with implicit task count
 
 test40.#   Test of job select/cons_tres and gres/mps options.
 =============================================================

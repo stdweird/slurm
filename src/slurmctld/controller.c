@@ -784,6 +784,7 @@ int main(int argc, char **argv)
 		bb_g_fini();
 		power_g_fini();
 		slurm_mcs_fini();
+		fed_mgr_fini();
 
 		if (running_cache) {
 			/* break out and end the association cache
@@ -878,7 +879,6 @@ int main(int argc, char **argv)
 	purge_front_end_state();
 	resv_fini();
 	trigger_fini();
-	fed_mgr_fini();
 	assoc_mgr_fini(1);
 	reserve_port_config(NULL);
 	free_rpc_stats();
@@ -2684,12 +2684,14 @@ static void _usage(char *prog_name)
 #endif
 #if (DEFAULT_DAEMONIZE != 0)
 	fprintf(stderr, "  -D      "
-			"\tRun daemon in foreground.\n");
+			"\tRun daemon in foreground, with logging copied to stdout.\n");
 #endif
 	fprintf(stderr, "  -f file "
 			"\tUse specified file for slurmctld configuration.\n");
 	fprintf(stderr, "  -h      "
 			"\tPrint this help message.\n");
+	fprintf(stderr, "  -i      "
+			"\tIgnore errors found while reading in state files on startup.\n");
 	fprintf(stderr, "  -L logfile "
 			"\tLog messages to the specified file.\n");
 	fprintf(stderr, "  -n value "

@@ -42,7 +42,7 @@
 #define _GNU_SOURCE	/* For POLLRDHUP */
 
 #if HAVE_JSON_C_INC
-#  include <json-c/json.h>
+#  include <json-c12/json.h>
 #elif HAVE_JSON_INC
 #  include <json/json.h>
 #endif
@@ -371,7 +371,7 @@ int main(int argc, char *argv[])
 	_read_config();
 	log_opts.stderr_level = LOG_LEVEL_QUIET;
 	log_opts.syslog_level = LOG_LEVEL_QUIET;
-	if (slurm_get_debug_flags() && DEBUG_FLAG_NODE_FEATURES)
+	if (slurm_get_debug_flags() & DEBUG_FLAG_NODE_FEATURES)
 		log_opts.logfile_level = LOG_LEVEL_DEBUG;
 	else
 		log_opts.logfile_level = LOG_LEVEL_ERROR;

@@ -882,7 +882,7 @@ typedef struct launch_tasks_request_msg {
 	char **spank_job_env;
 	uint32_t spank_job_env_size;
 	dynamic_plugin_data_t *select_jobinfo; /* select context, opaque data */
-	char *alias_list;	/* node name/address/hostnamne aliases */
+	char *alias_list;	/* node name/address/hostname aliases */
 	char *partition;	/* partition that job is running in */
 
 	/* only filled out if step is SLURM_EXTERN_CONT */
@@ -980,6 +980,8 @@ typedef struct kill_job_msg {
 	time_t   start_time;	/* time of job start, track job requeue */
 	uint32_t step_id;
 	time_t   time;		/* slurmctld's time of request */
+	uint32_t nnodes; /* Number of nodes allocated to the job */
+	uint16_t *job_node_cpus; /* Number of CPUs required on the nodes for the job */
 } kill_job_msg_t;
 
 typedef struct job_time_msg {
@@ -1009,7 +1011,7 @@ typedef struct reattach_tasks_response_msg {
 } reattach_tasks_response_msg_t;
 
 typedef struct prolog_launch_msg {
-	char *alias_list;		/* node name/address/hostnamne aliases */
+	char *alias_list;		/* node name/address/hostname aliases */
 	slurm_cred_t *cred;
 	uint32_t gid;
 	List job_gres_info;		/* Used to set Prolog env vars */
@@ -1025,6 +1027,7 @@ typedef struct prolog_launch_msg {
 	char *std_err;			/* pathname of stderr */
 	char *std_out;			/* pathname of stdout */
 	uint32_t uid;
+    uint16_t *job_node_cpus; /* Number of CPUs required on the nodes for the job */
 	char *user_name;		/* job's user name */
 	char *work_dir;			/* full pathname of working directory */
 	uint16_t x11;			/* X11 forwarding setup flags */
@@ -1038,7 +1041,7 @@ typedef struct prolog_launch_msg {
 typedef struct batch_job_launch_msg {
 	char *account;          /* account under which the job is running */
 	char *acctg_freq;	/* accounting polling intervals	*/
-	char *alias_list;	/* node name/address/hostnamne aliases */
+	char *alias_list;	/* node name/address/hostname aliases */
 	uint32_t array_job_id;	/* job array master job ID */
 	uint32_t array_task_id;	/* job array ID or NO_VAL */
 	uint32_t cpu_freq_min;  /* Minimum cpu frequency  */

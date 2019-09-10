@@ -4,7 +4,7 @@
 sbatch \- Submit a batch script to Slurm.
 
 .SH "SYNOPSIS"
-\fBsbatch\fR [\fIOPTIONS(0)\fR...] \fR[ : \fR[\fIOPTIONS(n)\fR...]\fR] \fIscript(0) \fR[\fIargs(0)\fR...]
+\fBsbatch\fR [\fIOPTIONS(0)\fR...] \fR[ : \fR[\fIOPTIONS(N)\fR...]\fR] \fIscript(0) \fR[\fIargs(0)\fR...]
 
 Option(s) define multiple jobs in a co-scheduled heterogeneous job.
 For more details about heterogeneous jobs see the document
@@ -590,6 +590,9 @@ Regardless of this setting, the appropriate \fISLURM_*\fR
 task environment variables are always exported to the environment.
 This option is particularly important for jobs that are submitted on one cluster
 and execute on a different cluster (e.g. with different paths).
+To avoid steps inheriting environment export settings (e.g. \fINONE\fR) from
+sbatch command, the environment variable SLURM_EXPORT_ENV should be set to
+\fIALL\fR in the job script.
 
 .TP
 \fB\-\-export\-file\fR=<\fIfilename\fR | \fIfd\fR>
@@ -1032,8 +1035,8 @@ Default value is \fBDefMemPerNode\fR and the maximum value is
 seen using the \fBscontrol show config\fR command.
 This parameter would generally be used if whole nodes
 are allocated to jobs (\fBSelectType=select/linear\fR).
-Also see fB\-\-mem\-per\-cpu\fR and fB\-\-mem\-per\-gpu\fR.
-The \fB\-\-mem\fR, \fB\-\-mem\-per\-cpu\fR and fB\-\-mem\-per\-gpu\fR
+Also see \fB\-\-mem\-per\-cpu\fR and \fB\-\-mem\-per\-gpu\fR.
+The \fB\-\-mem\fR, \fB\-\-mem\-per\-cpu\fR and \fB\-\-mem\-per\-gpu\fR
 options are mutually exclusive.
 
 NOTE: A memory size specification of zero is treated as a special case and
@@ -1068,8 +1071,8 @@ are allocated to jobs (\fBSelectType=select/cons_res\fR).
 If resources are allocated by the core, socket or whole nodes; the number
 of CPUs allocated to a job may be higher than the task count and the value
 of \fB\-\-mem\-per\-cpu\fR should be adjusted accordingly.
-Also see \fB\-\-mem\fR and fB\-\-mem\-per\-gpu\fR.
-The \fB\-\-mem\fR, \fB\-\-mem\-per\-cpu\fR and fB\-\-mem\-per\-gpu\fR
+Also see \fB\-\-mem\fR and \fB\-\-mem\-per\-gpu\fR.
+The \fB\-\-mem\fR, \fB\-\-mem\-per\-cpu\fR and \fB\-\-mem\-per\-gpu\fR
 options are mutually exclusive.
 
 .TP
@@ -1083,7 +1086,7 @@ per partition basis.
 If configured, the parameters can be seen using the \fBscontrol show config\fR
 and \fBscontrol show partition\fR commands.
 Also see \fB\-\-mem\fR.
-The \fB\-\-mem\fR, \fB\-\-mem\-per\-cpu\fR and fB\-\-mem\-per\-gpu\fR
+The \fB\-\-mem\fR, \fB\-\-mem\-per\-cpu\fR and \fB\-\-mem\-per\-gpu\fR
 options are mutually exclusive.
 
 .TP
@@ -2057,7 +2060,7 @@ Set to "verbose" if the \-\-mem\-bind\fR option includes the verbose option.
 Set to "quiet" otherwise.
 .TP
 \fBSLURM_*_PACK_GROUP_#\fR
-For a heterogenous job allocation, the environment variables are set separately
+For a heterogeneous job allocation, the environment variables are set separately
 for each component.
 .TP
 \fBSLURM_ARRAY_TASK_COUNT\fR
@@ -2094,6 +2097,9 @@ Only set if the \fB\-\-cpus\-per\-task\fR option is specified.
 .TP
 \fBSLURM_DISTRIBUTION\fR
 Same as \fB\-m, \-\-distribution\fR
+.TP
+\fBSLURM_EXPORT_ENV\fR
+Same as \fB\-e, \-\-export\fR.
 .TP
 \fBSLURM_GPUS\fR
 Number of GPUs requested.
