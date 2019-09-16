@@ -242,7 +242,9 @@ database changes to slurmctld daemons on each cluster
 Summary: Slurm\'s implementation of the pmi libraries
 Group: System Environment/Base
 Requires: %{name}%{?_isa} = %{version}-%{release}
+%if ! %{with pmix}
 Conflicts: pmix-libpmi
+%endif
 %description libpmi
 Slurm\'s version of libpmi. For systems using Slurm, this version
 is preferred over the compatibility libraries shipped by the PMIx project.
