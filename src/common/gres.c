@@ -123,7 +123,8 @@ typedef struct slurm_gres_ops {
 						  int local_proc_id );
 	void		(*step_reset_env)	( char ***job_env_ptr,
 						  void *gres_ptr,
-						  bitstr_t *usable_gres );
+						  bitstr_t *usable_gres,
+					          int local_proc_id );
 	void		(*send_stepd)		( int fd );
 	void		(*recv_stepd)		( int fd );
 	int		(*job_info)		( gres_job_state_t *job_gres_data,
@@ -12184,7 +12185,7 @@ extern void gres_plugin_step_set_env(char ***job_env_ptr, List step_gres_list,
 					(*(gres_context[i].ops.step_reset_env))
 						(job_env_ptr,
 						 gres_ptr->gres_data,
-						 usable_gres);
+						 usable_gres, local_proc_id);
 				} else {
 					(*(gres_context[i].ops.step_set_env))
 						(job_env_ptr,
@@ -12199,7 +12200,7 @@ extern void gres_plugin_step_set_env(char ***job_env_ptr, List step_gres_list,
 		if (!found) { /* No data fond */
 			if (accel_bind_type || tres_bind) {
 				(*(gres_context[i].ops.step_reset_env))
-					(job_env_ptr, NULL, NULL); /* Fixme */
+					(job_env_ptr, NULL, NULL, 0); /* Fixme*/
 			} else {
 				(*(gres_context[i].ops.step_set_env))
 					(job_env_ptr,
