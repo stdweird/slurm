@@ -444,7 +444,9 @@ static void _parse_pbs_nodes_opts(char *node_opts)
 {
 	int i = 0;
 	char *temp = NULL;
+	int tasks = 0;
 	int ppn = 0;
+	int max_ppn = 0;
 	int node_cnt = 0;
 	hostlist_t hl = hostlist_create(NULL);
 
@@ -452,6 +454,9 @@ static void _parse_pbs_nodes_opts(char *node_opts)
 		if (!xstrncmp(node_opts+i, "ppn=", 4)) {
 			i+=4;
 			ppn += strtol(node_opts+i, NULL, 10);
+			tasks += ppn;
+            if (ppn > max_ppn)
+                max_ppn = ppn;
 			_get_next_pbs_node_part(node_opts, &i);
 		} else if (isdigit(node_opts[i])) {
 			node_cnt += strtol(node_opts+i, NULL, 10);
@@ -473,12 +478,19 @@ static void _parse_pbs_nodes_opts(char *node_opts)
 		xfree(nodes);
 	}
 
-	if (ppn) {
+	if (tasks) {
 		char *ntasks;
-		ppn *= node_cnt;
-		ntasks = xstrdup_printf("%d", ppn);
+		tasks *= node_cnt;
+		ntasks = xstrdup_printf("%d", tasks);
 		slurm_process_option(&opt, 'n', ntasks, false, false);
+        xfree(ntasks);
 	}
+
+    if (max_ppn) {
+        char* ntasks_per_node = xstrdup("%d", max_ppn);
+  		slurm_process_option(&opt, 'n', ntasks_per_node, false, false);
+        pack_env.ntasks_per_node = max_ppn;
+    }
 
 	if (hostlist_count(hl) > 0) {
 		char *nodelist = hostlist_ranged_string_xmalloc(hl);
