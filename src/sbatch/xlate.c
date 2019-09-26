@@ -487,9 +487,10 @@ static void _parse_pbs_nodes_opts(char *node_opts)
 	}
 
     if (max_ppn) {
-        char* ntasks_per_node = xstrdup("%d", max_ppn);
+        char* ntasks_per_node = xstrdup_printf("%d", max_ppn);
   		slurm_process_option(&opt, 'n', ntasks_per_node, false, false);
         pack_env.ntasks_per_node = max_ppn;
+        xfree(ntasks_per_node);
     }
 
 	if (hostlist_count(hl) > 0) {
