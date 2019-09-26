@@ -123,7 +123,8 @@ typedef struct slurm_gres_ops {
 						  int local_proc_id );
 	void		(*step_reset_env)	( char ***job_env_ptr,
 						  void *gres_ptr,
-						  bitstr_t *usable_gres );
+						  bitstr_t *usable_gres,
+					          int local_proc_id );
 	void		(*send_stepd)		( int fd );
 	void		(*recv_stepd)		( int fd );
 	int		(*job_info)		( gres_job_state_t *job_gres_data,
@@ -12038,26 +12039,28 @@ static bitstr_t *_get_gres_map(char *map_gres, int local_proc_id)
 	if (!map_gres || !map_gres[0])
 		return NULL;
 
-	tmp = xstrdup(map_gres);
-	tok = strtok_r(tmp, ",", &save_ptr);
-	while (tok) {
-		if ((mult = strchr(tok, '*'))) {
-			mult[0] = '\0';
-			task_mult = atoi(mult + 1);
-		} else
-			task_mult = 1;
-		if ((local_proc_id >= task_offset) &&
-		    (local_proc_id <= (task_offset + task_mult - 1))) {
-			map_value = strtol(tok, NULL, 0);
-			if ((map_value < 0) || (map_value >= MAX_GRES_BITMAP))
-				break;	/* Bad value */
-			usable_gres = bit_alloc(MAX_GRES_BITMAP);
-			bit_set(usable_gres, map_value);
-			break;	/* All done */
-		} else {
-			task_offset += task_mult;
+	while (usable_gres == NULL) {
+		tmp = xstrdup(map_gres);
+		tok = strtok_r(tmp, ",", &save_ptr);
+		while (tok) {
+			if ((mult = strchr(tok, '*'))) {
+				mult[0] = '\0';
+				task_mult = atoi(mult + 1);
+			} else
+				task_mult = 1;
+			if ((local_proc_id >= task_offset) &&
+			    (local_proc_id <= (task_offset + task_mult - 1))) {
+				map_value = strtol(tok, NULL, 0);
+				if ((map_value < 0) || (map_value >= MAX_GRES_BITMAP))
+					break;	/* Bad value */
+				usable_gres = bit_alloc(MAX_GRES_BITMAP);
+				bit_set(usable_gres, map_value);
+				break;	/* All done */
+			} else {
+				task_offset += task_mult;
+			}
+			tok = strtok_r(NULL, ",", &save_ptr);
 		}
-		tok = strtok_r(NULL, ",", &save_ptr);
 	}
 	xfree(tmp);
 
@@ -12078,28 +12081,30 @@ static bitstr_t * _get_gres_mask(char *mask_gres, int local_proc_id)
 	if (!mask_gres || !mask_gres[0])
 		return NULL;
 
-	tmp = xstrdup(mask_gres);
-	tok = strtok_r(tmp, ",", &save_ptr);
-	while (tok) {
-		if ((mult = strchr(tok, '*')))
-			task_mult = atoi(mult + 1);
-		else
-			task_mult = 1;
-		if ((local_proc_id >= task_offset) &&
-		    (local_proc_id <= (task_offset + task_mult - 1))) {
-			mask_value = strtol(tok, NULL, 0);
-			if ((mask_value <= 0) || (mask_value >= 0xffffffff))
-				break;	/* Bad value */
-			usable_gres = bit_alloc(MAX_GRES_BITMAP);
-			for (i = 0; i < 64; i++) {
-				if ((mask_value >> i) & 0x1)
-					bit_set(usable_gres, i);
+	while (usable_gres == NULL) {
+		tmp = xstrdup(mask_gres);
+		tok = strtok_r(tmp, ",", &save_ptr);
+		while (tok) {
+			if ((mult = strchr(tok, '*')))
+				task_mult = atoi(mult + 1);
+			else
+				task_mult = 1;
+			if ((local_proc_id >= task_offset) &&
+			    (local_proc_id <= (task_offset + task_mult - 1))) {
+				mask_value = strtol(tok, NULL, 0);
+				if ((mask_value <= 0) || (mask_value >= 0xffffffff))
+					break;	/* Bad value */
+				usable_gres = bit_alloc(MAX_GRES_BITMAP);
+				for (i = 0; i < 64; i++) {
+					if ((mask_value >> i) & 0x1)
+						bit_set(usable_gres, i);
+				}
+				break;	/* All done */
+			} else {
+				task_offset += task_mult;
 			}
-			break;	/* All done */
-		} else {
-			task_offset += task_mult;
+			tok = strtok_r(NULL, ",", &save_ptr);
 		}
-		tok = strtok_r(NULL, ",", &save_ptr);
 	}
 	xfree(tmp);
 
@@ -12184,7 +12189,7 @@ extern void gres_plugin_step_set_env(char ***job_env_ptr, List step_gres_list,
 					(*(gres_context[i].ops.step_reset_env))
 						(job_env_ptr,
 						 gres_ptr->gres_data,
-						 usable_gres);
+						 usable_gres, local_proc_id);
 				} else {
 					(*(gres_context[i].ops.step_set_env))
 						(job_env_ptr,
@@ -12199,7 +12204,7 @@ extern void gres_plugin_step_set_env(char ***job_env_ptr, List step_gres_list,
 		if (!found) { /* No data fond */
 			if (accel_bind_type || tres_bind) {
 				(*(gres_context[i].ops.step_reset_env))
-					(job_env_ptr, NULL, NULL); /* Fixme */
+					(job_env_ptr, NULL, NULL, 0); /* Fixme*/
 			} else {
 				(*(gres_context[i].ops.step_set_env))
 					(job_env_ptr,
