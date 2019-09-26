@@ -680,8 +680,29 @@ static void _parse_pbs_resource_list(char *rl)
 			slurm_process_option(&opt, 't', temp, false, false);
 			xfree(temp);
 		} else if (!xstrncmp(rl+i, "pmem=", 5)) {
-			i+=5;
-			_get_next_pbs_option(rl, &i);
+           int end = 0;
+
+           i+=5;
+           temp = _get_pbs_option_value(rl, &i, ',');
+           if (!temp) {
+               error("No value given for pmem");
+               exit(error_exit);
+           }
+           end = strlen(temp) - 1;
+           if (toupper(temp[end]) == 'B') {
+               /* In Torque they do GB or MB on the
+                * end of size, we just want G or M so
+                * we will remove the b on the end
+                */
+               temp[end] = '\0';
+           }
+           opt.mem_per_cpu = (int) str_to_mbytes(temp);
+           if (opt.mem_per_cpu < 0) {
+               error("invalid pmem memory per cpu constraint %s", temp);
+               exit(error_exit);
+           }
+
+           xfree(temp);
 		} else if (!xstrncmp(rl+i, "proc=", 5)) {
 			i += 5;
 			temp = _get_pbs_option_value(rl, &i, ',');
@@ -691,8 +712,29 @@ static void _parse_pbs_resource_list(char *rl)
 			xfree(temp);
 			_get_next_pbs_option(rl, &i);
 		} else if (!xstrncmp(rl+i, "pvmem=", 6)) {
-			i+=6;
-			_get_next_pbs_option(rl, &i);
+           int end = 0;
+
+           i+=6;
+           temp = _get_pbs_option_value(rl, &i, ',');
+           if (!temp) {
+               error("No value given for pvmem");
+               exit(error_exit);
+           }
+           end = strlen(temp) - 1;
+           if (toupper(temp[end]) == 'B') {
+               /* In Torque they do GB or MB on the
+                * end of size, we just want G or M so
+                * we will remove the b on the end
+                */
+               temp[end] = '\0';
+           }
+           opt.mem_per_cpu = (int) str_to_mbytes(temp);
+           if (opt.mem_per_cpu < 0) {
+               error("invalid pvmem memory per cpu constraint %s", temp);
+               exit(error_exit);
+           }
+
+           xfree(temp);
 		} else if (!xstrncasecmp(rl+i, "select=", 7)) {
 			i += 7;
 			temp = _get_pbs_option_value(rl, &i, ':');
@@ -705,8 +747,29 @@ static void _parse_pbs_resource_list(char *rl)
 			i+=9;
 			_get_next_pbs_option(rl, &i);
 		} else if (!xstrncmp(rl+i, "vmem=", 5)) {
-			i+=5;
-			_get_next_pbs_option(rl, &i);
+           int end = 0;
+
+           i+=5;
+           temp = _get_pbs_option_value(rl, &i, ',');
+           if (!temp) {
+               error("No value given for vmem");
+               exit(error_exit);
+           }
+           end = strlen(temp) - 1;
+           if (toupper(temp[end]) == 'B') {
+               /* In Torque they do GB or MB on the
+                * end of size, we just want G or M so
+                * we will remove the b on the end
+                */
+               temp[end] = '\0';
+           }
+           opt.pn_min_memory = (int) str_to_mbytes(temp);
+           if (opt.pn_min_memory < 0) {
+               error("invalid vmem memory constraint %s", temp);
+               exit(error_exit);
+           }
+
+           xfree(temp);
 		} else if (!xstrncmp(rl+i, "walltime=", 9)) {
 			i+=9;
 			temp = _get_pbs_option_value(rl, &i, ',');
