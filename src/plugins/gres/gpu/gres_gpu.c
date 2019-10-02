@@ -715,10 +715,16 @@ extern void step_set_env(char ***step_env_ptr, void *gres_ptr)
  * based upon the job step's GRES state and assigned CPUs.
  */
 extern void step_reset_env(char ***step_env_ptr, void *gres_ptr,
-			   bitstr_t *usable_gres)
+			   bitstr_t *usable_gres, int first_local_id)
 {
+	static int first_run=1;
 	static int local_inx = 0;
 	static bool already_seen = false;
+
+	if (first_run) {
+		local_inx = first_local_id;
+		first_run = 0;
+	}
 
 	_set_env(step_env_ptr, gres_ptr, 0, usable_gres,
 		 &already_seen, &local_inx, true, false);
