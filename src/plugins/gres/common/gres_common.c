@@ -201,7 +201,7 @@ extern void common_gres_set_env(List gres_devices, char ***env_ptr,
 	ListIterator itr;
 	char *global_prefix = "", *local_prefix = "";
 	char *new_global_list = NULL, *new_local_list = NULL;
-	uint64_t tmp_gres_per_node = 0; int gres_per_task = 0;
+	uint64_t tmp_gres_per_node = 0;
 
 	if (!gres_devices)
 		return;
@@ -244,7 +244,6 @@ extern void common_gres_set_env(List gres_devices, char ***env_ptr,
 		}
 		if (gres_step_ptr) {
 			tmp_gres_per_node = gres_step_ptr->gres_per_node;
-			gres_per_task = gres_step_ptr->gres_per_task;
 		}
 	}
 
@@ -253,15 +252,11 @@ extern void common_gres_set_env(List gres_devices, char ***env_ptr,
 		return;
 
 	if (bit_alloc) {
-		int index, assigned=0;
 		len = bit_size(bit_alloc);
 		i = -1;
-		(*local_inx) = (*local_inx) - 1;
-
 		itr = list_iterator_create(gres_devices);
 		while ((gres_device = list_next(itr))) {
 			i++;
-
 			if (i >= len) {
 				/*
 				 * This can happen if GRES count in slurm.conf
@@ -273,47 +268,24 @@ extern void common_gres_set_env(List gres_devices, char ***env_ptr,
 			}
 			if (!bit_test(bit_alloc, i))
 				continue;
-			(*local_inx)++;
-
-			/*
-			 * We're using local_inx with an offset of task number,
-			 * if we didn't get enought GPU starting from offset
-			 * start back from zero.
-			 */
-			if ( *local_inx >= len)
-				(*local_inx) = 0;
-
-			if (use_local_dev_index)
-				index = *local_inx;
-			else
-				index = gres_device->dev_num;
-
-			error("i=%d, local_inx=%d, gres_per_task=%d assigned=%d",i,*local_inx,gres_per_task,assigned);
-
 			if (reset) {
 				if (!first_device)
 					first_device = gres_device;
-				if (!bit_test(usable_gres, index))
+				if (!bit_test(usable_gres, i))
 					continue;
 			}
-
 			if (global_id && !set_global_id) {
 				*global_id = gres_device->dev_num;
 				set_global_id = true;
 			}
-
 			xstrfmtcat(new_local_list, "%s%s%d", local_prefix,
-				   prefix, index);
+				   prefix, use_local_dev_index ?
+				   (*local_inx)++ : gres_device->dev_num);
 			local_prefix = ",";
 			//info("looking at %d and %d", i, gres_device->dev_num);
 			xstrfmtcat(new_global_list, "%s%s%d", global_prefix,
 				   prefix, gres_device->dev_num);
 			global_prefix = ",";
-			assigned++;
-			if (reset && gres_per_task && assigned >= gres_per_task ) {
-				error("gres_per_task = %d", gres_per_task);
-				break;
-			}
 		}
 		list_iterator_destroy(itr);
 		if (reset && !new_global_list && first_device) {
