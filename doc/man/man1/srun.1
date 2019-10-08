@@ -1,4 +1,4 @@
-.TH srun "1" "Slurm Commands" "May 2019" "Slurm Commands"
+.TH srun "1" "Slurm Commands" "October 2019" "Slurm Commands"
 
 .SH "NAME"
 srun \- Run parallel jobs
@@ -1368,6 +1368,11 @@ Also see \fB\-\-mem\fR and \fB\-\-mem\-per\-gpu\fR.
 The \fB\-\-mem\fR, \fB\-\-mem\-per\-cpu\fR and \fB\-\-mem\-per\-gpu\fR
 options are mutually exclusive.
 
+NOTE:If the final amount of memory requested by job
+(eg.: when \-\-mem\-per\-cpu use with \-\-exclusive option)
+can't be satisfied by any of nodes configured in the
+partition, the job will be rejected.
+
 .TP
 \fB\-\-mem\-per\-gpu\fR=<\fIsize[units]\fR>
 Minimum memory required per allocated GPU.
@@ -2059,7 +2064,7 @@ By default, no signal is sent before the job's end time.
 If a \fIsig_num\fR is specified without any \fIsig_time\fR,
 the default time will be 60 seconds. This option applies to job allocations.
 To have the signal sent at preemption time see
-the \fBpreempt_send_user_signal\fR \fBSlurmctldParameter\R.
+the \fBpreempt_send_user_signal\fR \fBSlurmctldParameter\fR.
 
 .TP
 \fB\-\-slurmd\-debug\fR=<\fIlevel\fR>
@@ -2946,7 +2951,7 @@ The relative node ID of the current node.
 List of nodes allocated to the job.
 .TP
 \fBSLURM_NTASKS\fR (and \fBSLURM_NPROCS\fR for backwards compatibility)
-Total number of processes in the current job.
+Total number of processes in the current job or job step.
 .TP
 \fBSLURM_PACK_SIZE\fR
 Set to count of components in heterogeneous job.

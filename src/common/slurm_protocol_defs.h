@@ -1651,6 +1651,8 @@ extern uint64_t suffix_mult(char *suffix);
 				      remaining, (int)size);		\
 				goto rwfail;				\
 			} else if (rc < 0) {				\
+				if ((errno == EAGAIN) || (errno == EINTR))\
+					continue;			\
 				debug("%s:%d: %s: safe_read (%d of %d) failed: %m", \
 				      __FILE__, __LINE__, __func__, \
 				      remaining, (int)size);		\
@@ -1673,6 +1675,8 @@ extern uint64_t suffix_mult(char *suffix);
 		while(remaining > 0) {					\
 			rc = write(fd, ptr, remaining);			\
  			if (rc < 0) {					\
+				if ((errno == EAGAIN) || (errno == EINTR))\
+					continue;			\
 				debug("%s:%d: %s: safe_write (%d of %d) failed: %m", \
 				      __FILE__, __LINE__, __func__, \
 				      remaining, (int)size);		\

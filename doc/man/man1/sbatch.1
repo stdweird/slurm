@@ -1,4 +1,4 @@
-.TH sbatch "1" "Slurm Commands" "May 2019" "Slurm Commands"
+.TH sbatch "1" "Slurm Commands" "October 2019" "Slurm Commands"
 
 .SH "NAME"
 sbatch \- Submit a batch script to Slurm.
@@ -16,6 +16,8 @@ sbatch submits a batch script to Slurm.  The batch script may be given to
 sbatch through a file name on the command line, or if no file name is specified,
 sbatch will read in a script from standard input. The batch script may contain
 options preceded with "#SBATCH" before any executable commands in the script.
+sbatch will stop processing further #SBATCH directives once the first
+non-comment non-whitespace line has been reached in the script.
 
 sbatch exits immediately after the script is successfully transferred to the
 Slurm controller and assigned a Slurm job ID.  The batch script is not
@@ -1075,6 +1077,11 @@ Also see \fB\-\-mem\fR and \fB\-\-mem\-per\-gpu\fR.
 The \fB\-\-mem\fR, \fB\-\-mem\-per\-cpu\fR and \fB\-\-mem\-per\-gpu\fR
 options are mutually exclusive.
 
+NOTE:If the final amount of memory requested by job
+(eg.: when \-\-mem\-per\-cpu use with \-\-exclusive option)
+can't be satisfied by any of nodes configured in the
+partition, the job will be rejected.
+
 .TP
 \fB\-\-mem\-per\-gpu\fR=<\fIsize[units]\fR>
 Minimum memory required per allocated GPU.
@@ -1637,7 +1644,7 @@ Use the "B:" option to signal only the batch shell, none of the other
 processes will be signaled. By default all job steps will be signaled,
 but not the batch shell itself.
 To have the signal sent at preemption time see the
-\fBpreempt_send_user_signal\fR \fBSlurmctldParameter\R.
+\fBpreempt_send_user_signal\fR \fBSlurmctldParameter\fR.
 
 .TP
 \fB\-\-sockets\-per\-node\fR=<\fIsockets\fR>

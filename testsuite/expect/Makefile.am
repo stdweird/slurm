@@ -133,7 +133,7 @@ EXTRA_DIST = \
 	test1.113			\
 	test1.114			\
 	test1.115			\
-	test1.116			\
+	test1.117			\
 	test2.1				\
 	test2.2				\
 	test2.3				\
@@ -180,6 +180,8 @@ EXTRA_DIST = \
 	inc3.11.6			\
 	inc3.11.7			\
 	inc3.11.8			\
+	inc3.11.9			\
+	inc3.11.10			\
 	test3.12			\
 	test3.13			\
 	test3.14			\
@@ -229,6 +231,7 @@ EXTRA_DIST = \
 	test6.13.prog.c			\
 	test6.14			\
 	test6.15			\
+	test6.15.prog.c			\
 	test6.16			\
 	test6.17			\
 	test7.1				\
@@ -522,6 +525,7 @@ EXTRA_DIST = \
 	inc22.1.3                       \
 	inc22.1.4                       \
 	inc22.1.5                       \
+	inc22.1.fed                     \
 	test22.2			\
 	test23.1			\
 	test23.2			\

@@ -1587,10 +1587,11 @@ _get_req_features(struct node_set *node_set_ptr, int node_set_size,
 				max_nodes, req_nodes, test_only,
 				preemptee_candidates, preemptee_job_list,
 				has_xand, exc_core_bitmap, resv_overlap);
-		if ((resv_rc == ESLURM_RESERVATION_MAINT) &&
-		    (error_code == ESLURM_NODE_NOT_AVAIL))
-			 error_code = ESLURM_RESERVATION_MAINT;
 	}
+
+	if ((resv_rc == ESLURM_RESERVATION_MAINT) &&
+	    (error_code == ESLURM_NODE_NOT_AVAIL))
+		error_code = ESLURM_RESERVATION_MAINT;
 #if 0
 {
 	char *tmp_str = bitmap2node_name(*select_bitmap);
@@ -2197,6 +2198,7 @@ _pick_best_nodes(struct node_set *node_set_ptr, int node_set_size,
 				}
 				list_iterator_destroy(job_iterator);
 				bit_and(avail_bitmap, avail_node_bitmap);
+				bit_and(avail_bitmap, total_bitmap);
 				preemptee_cand = preemptee_candidates;
 			} else
 				preemptee_cand = preemptee_candidates;
@@ -2907,6 +2909,7 @@ extern int select_nodes(struct job_record *job_ptr, bool test_only,
 			filter_by_node_owner(job_ptr, unavail_bitmap);
 			bit_not(unavail_bitmap);
 			bit_and_not(unavail_bitmap, future_node_bitmap);
+			bit_and(unavail_bitmap, part_ptr->node_bitmap);
 			if (job_ptr->details->req_node_bitmap &&
 			    bit_overlap(unavail_bitmap,
 					job_ptr->details->req_node_bitmap)) {
@@ -3140,14 +3143,10 @@ extern int select_nodes(struct job_record *job_ptr, bool test_only,
 	 * a reboot first.  Job state could be changed above so we need to
 	 * recheck its state to see if it's currently configuring.
 	 * PROLOG_FLAG_CONTAIN also turns on PROLOG_FLAG_ALLOC.
-	 *
-	 * We also need to add the batch step here.
 	 */
 	if (!IS_JOB_CONFIGURING(job_ptr)) {
 		if (slurmctld_conf.prolog_flags & PROLOG_FLAG_ALLOC)
 			launch_prolog(job_ptr);
-		if (job_ptr->batch_flag)
-			(void)build_batch_step(job_ptr);
 	}
 
 cleanup:
@@ -3345,6 +3344,15 @@ extern void launch_prolog(struct job_record *job_ptr)
 	prolog_msg_ptr->cred = slurm_cred_create(slurmctld_config.cred_ctx,
 						 &cred_arg,
 						 SLURM_PROTOCOL_VERSION);
+	if (!prolog_msg_ptr->cred) {
+		error("%s: slurm_cred_create failure for %pJ",
+		      __func__, job_ptr);
+		slurm_free_prolog_launch_msg(prolog_msg_ptr);
+		job_ptr->details->begin_time = time(NULL) + 120;
+		job_complete(job_ptr->job_id, slurmctld_conf.slurm_user_id,
+			     true, false, 0);
+		return;
+	}
 
 	agent_arg_ptr = xmalloc(sizeof(agent_arg_t));
 	agent_arg_ptr->retry = 0;
@@ -3448,7 +3456,7 @@ extern int list_find_feature(void *feature_entry, void *key)
  * IN use_active - if set, then only consider nodes with the identified features
  *	active, otherwise use available features
  * IN/OUT node_bitmap - nodes available for use, clear if unusable
- * OUT has_xor - set if XOR/XAND found in feature expresion
+ * OUT has_xor - set if XOR/XAND found in feature expression
  * RET true if valid, false otherwise
  */
 extern bool valid_feature_counts(struct job_record *job_ptr, bool use_active,
@@ -3501,12 +3509,21 @@ extern bool valid_feature_counts(struct job_record *job_ptr, bool use_active,
 		else
 			tmp_bitmap = job_feat_ptr->node_bitmap_avail;
 		if (tmp_bitmap) {
-			if (last_op == FEATURE_OP_AND) {
+			/*
+			 * Here we need to use the current feature for XOR/AND
+			 * not the last_op.  For instance fastio&[xeon|nehalem]
+			 * should ignore xeon (in valid_feature_count), but if
+			 * would be based on last_op it will see AND operation.
+			 * This should only be used when dealing with middle
+			 * options, not for the end as done in the last_paren
+			 * check below.
+			 */
+			if ((job_feat_ptr->op_code == FEATURE_OP_XOR) ||
+			    (job_feat_ptr->op_code == FEATURE_OP_XAND)) {
+				*has_xor = true;
+			} else if (last_op == FEATURE_OP_AND) {
 				bit_and(work_bitmap, tmp_bitmap);
 			} else if (last_op == FEATURE_OP_OR) {
-				bit_or(work_bitmap, tmp_bitmap);
-			} else {	/* FEATURE_OP_XOR or FEATURE_OP_XAND */
-				*has_xor = true;
 				bit_or(work_bitmap, tmp_bitmap);
 			}
 		} else {	/* feature not found */
@@ -3524,7 +3541,6 @@ extern bool valid_feature_counts(struct job_record *job_ptr, bool use_active,
 				bit_or(feature_bitmap, work_bitmap);
 			} else {	/* FEATURE_OP_XOR or FEATURE_OP_XAND */
 				*has_xor = true;
-				bit_or(feature_bitmap, work_bitmap);
 			}
 			FREE_NULL_BITMAP(paren_bitmap);
 			work_bitmap = feature_bitmap;
@@ -3532,6 +3548,19 @@ extern bool valid_feature_counts(struct job_record *job_ptr, bool use_active,
 
 		last_op = job_feat_ptr->op_code;
 		last_paren_cnt = job_feat_ptr->paren;
+#if _DEBUG
+{
+		char *tmp_f, *tmp_w, *tmp_t;
+		tmp_f = bitmap2node_name(feature_bitmap);
+		tmp_w = bitmap2node_name(work_bitmap);
+		tmp_t = bitmap2node_name(tmp_bitmap);
+		info("%s: feature:%s feature_bitmap:%s work_bitmap:%s tmp_bitmap:%s", __func__, job_feat_ptr->name, tmp_f, tmp_w, tmp_t);
+		xfree(tmp_f);
+		xfree(tmp_w);
+		xfree(tmp_t);
+}
+#endif
+
 	}
 	list_iterator_destroy(job_feat_iter);
 	if (!have_count)
@@ -3540,9 +3569,10 @@ extern bool valid_feature_counts(struct job_record *job_ptr, bool use_active,
 	FREE_NULL_BITMAP(paren_bitmap);
 #if _DEBUG
 {
-	char tmp[32];
-	bit_fmt(tmp, sizeof(tmp), node_bitmap);
-	info("%s: RC:%d NODE_BITMAP:%s", __func__, rc, tmp);
+	char * tmp;
+	tmp = bitmap2node_name(node_bitmap);
+	info("%s: RC:%d NODES:%s HAS_XOR:%d", __func__, rc, tmp, *has_xor);
+	xfree(tmp);
 }
 #endif
 	return rc;
@@ -4496,6 +4526,9 @@ extern void build_node_details(struct job_record *job_ptr, bool new_alloc)
  * node satisfies the batch_features specification then pick first node).
  * Execute this AFTER any node feature changes are made by the node_features
  * plugin.
+ *
+ * If changes are made here, see if changes need to be made in
+ * test_job_nodes_ready().
  *
  * Return SLURM_SUCCESS or error code
  */

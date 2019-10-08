@@ -440,6 +440,7 @@ static int  _try_sched(struct job_record *job_ptr, bitstr_t **avail_bitmap,
 						       &preemptee_job_list,
 						       exc_core_bitmap);
 				FREE_NULL_LIST(preemptee_job_list);
+				FREE_NULL_LIST(preemptee_candidates);
 				if ((rc == SLURM_SUCCESS) &&
 				    ((high_start == 0) ||
 				     (high_start < job_ptr->start_time))) {
@@ -508,6 +509,7 @@ static int  _try_sched(struct job_record *job_ptr, bitstr_t **avail_bitmap,
 						       &preemptee_job_list,
 						       exc_core_bitmap);
 				FREE_NULL_LIST(preemptee_job_list);
+				FREE_NULL_LIST(preemptee_candidates);
 				if ((rc == SLURM_SUCCESS) &&
 				    ((low_start == 0) ||
 				     (low_start > job_ptr->start_time))) {
@@ -1020,14 +1022,18 @@ extern void *backfill_agent(void *args)
 	return NULL;
 }
 
-/* Clear the start_time for all pending jobs. This is used to ensure that a job which
- * can run in multiple partitions has its start_time set to the smallest
- * value in any of those partitions. */
+/*
+ * Clear the start_time and sched_nodes for all pending jobs. This is used to
+ * ensure that a job which can run in multiple partitions has its start_time and
+ * sched_nodes set to the partition offering the earliest start_time.
+ */
 static int _clear_job_start_times(void *x, void *arg)
 {
 	struct job_record *job_ptr = (struct job_record *) x;
-	if (IS_JOB_PENDING(job_ptr))
+	if (IS_JOB_PENDING(job_ptr)) {
 		job_ptr->start_time = 0;
+		xfree(job_ptr->sched_nodes);
+	}
 	return SLURM_SUCCESS;
 }
 
@@ -1549,10 +1555,8 @@ static int _attempt_backfill(void)
 			debug("backfill: no jobs to backfill");
 		FREE_NULL_LIST(job_queue);
 		return 0;
-	} else {
+	} else
 		debug("backfill: %u jobs to backfill", job_test_count);
-		job_test_count = 0;
-	}
 
 	if (backfill_continue)
 		list_for_each(job_list, _clear_job_start_times, NULL);
@@ -1565,6 +1569,8 @@ static int _attempt_backfill(void)
 	slurmctld_diag_stats.bf_queue_len = job_test_count;
 	slurmctld_diag_stats.bf_queue_len_sum += slurmctld_diag_stats.
 						 bf_queue_len;
+	job_test_count = 0;
+
 	slurmctld_diag_stats.bf_last_depth = 0;
 	slurmctld_diag_stats.bf_last_depth_try = 0;
 	slurmctld_diag_stats.bf_when_last_cycle = now;
@@ -2152,6 +2158,8 @@ next_task:
 				save_whole_node = job_ptr->details->whole_node;
 				job_ptr->details->share_res = 0;
 				job_ptr->details->whole_node = 1;
+				if (!save_whole_node)
+					job_ptr->bit_flags |= BF_WHOLE_NODE_TEST;
 				test_fini = 0;
 			}
 		}
@@ -2211,6 +2219,7 @@ next_task:
 			}
 		}
 		job_ptr->bit_flags &= ~BACKFILL_TEST;
+		job_ptr->bit_flags &= ~BF_WHOLE_NODE_TEST;
 		job_ptr->bit_flags &= ~TEST_NOW_ONLY;
 
 		now = time(NULL);
@@ -3302,9 +3311,16 @@ static bool _pack_job_limit_check(pack_job_map_t *map, time_t now)
 		job_ptr = rec->job_ptr;
 		if (begun_jobs > fini_jobs) {
 			time_t end_time_exp = job_ptr->end_time_exp;
+			time_t end_time = job_ptr->end_time;
+			uint32_t job_state = job_ptr->job_state;
+			/* Simulate normal job completion */
 			job_ptr->end_time_exp = now;
+			job_ptr->end_time = job_ptr->start_time;
+			job_ptr->job_state = JOB_COMPLETE | JOB_COMPLETING;
 			acct_policy_job_fini(job_ptr);
 			job_ptr->end_time_exp = end_time_exp;
+			job_ptr->end_time = end_time;
+			job_ptr->job_state = job_state;
 			xfree(job_ptr->tres_alloc_cnt);
 			job_ptr->tres_alloc_cnt = tres_alloc_save[fini_jobs++];
 		}
@@ -3703,12 +3719,12 @@ static bool _job_pack_deadlock_test(struct job_record *job_ptr)
 	 */
 	part_iter = list_iterator_create(deadlock_global_list);
 	while ((dl_part_ptr2 = (deadlock_part_struct_t *)list_next(part_iter))){
-		if (dl_part_ptr2 == dl_part_ptr)  /* Current partion, skip it */
+		if (dl_part_ptr2 == dl_part_ptr) /* Current partition, skip it */
 			continue;
 		dl_job_ptr2 = list_find_first(dl_part_ptr2->deadlock_job_list,
 					      _deadlock_part_list_srch,
 					      job_ptr);
-		if (!dl_job_ptr2)   /* Pack job not in this partion, no check */
+		if (!dl_job_ptr2) /* Pack job not in this partition, no check */
 			continue;
 		job_iter = list_iterator_create(dl_part_ptr->deadlock_job_list);
 		while ((dl_job_ptr2 = (deadlock_job_struct_t *)

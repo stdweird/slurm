@@ -3753,6 +3753,10 @@ _validate_and_set_defaults(slurm_ctl_conf_t *conf, s_p_hashtbl_t *hashtbl)
 
 	if (!s_p_get_uint16(&conf->fast_schedule, "FastSchedule", hashtbl))
 		conf->fast_schedule = DEFAULT_FAST_SCHEDULE;
+	else if (conf->fast_schedule == 0 && run_in_daemon("slurmctld,slurmd"))
+		error("FastSchedule will be removed in 20.02, as will the FastSchedule=0 functionality. Please consider removing this from your configuration now.");
+	else if (conf->fast_schedule == 2 && run_in_daemon("slurmctld,slurmd"))
+		error("FastSchedule will be removed in 20.02. The FastSchedule=2 functionality will be available through the new SlurmdParameters=config_overrides option. Please consider changing your configuration now.");
 
 	(void) s_p_get_string(&conf->fed_params, "FederationParameters",
 			      hashtbl);
@@ -4529,13 +4533,14 @@ _validate_and_set_defaults(slurm_ctl_conf_t *conf, s_p_hashtbl_t *hashtbl)
 				     "proctrack/linuxproc"))
 				fatal("Invalid combination: PrologFlags=X11 cannot be combined with proctrack/linuxproc");
 			/*
-			 * proctrack/cray or proctrack/cgroup are required for
-			 * pam_slurm_adopt, but don't fatal if using a different
-			 * proctrack plugin.
+			 * proctrack/cray_aries or proctrack/cgroup are
+			 * required for pam_slurm_adopt, but don't fatal if
+			 * using a different proctrack plugin.
 			 */
 			if (xstrcmp(conf->proctrack_type, "proctrack/cgroup") &&
-			    xstrcmp(conf->proctrack_type, "proctrack/cray"))
-				error("WARNING: If using PrologFlags=Contain for pam_slurm_adopt, either proctrack/cgroup or proctrack/cray is required.");
+			    xstrcmp(conf->proctrack_type,
+				    "proctrack/cray_aries"))
+				error("If using PrologFlags=Contain for pam_slurm_adopt, either proctrack/cgroup or proctrack/cray_aries is required.  If not using pam_slurm_adopt, please ignore error.");
 		}
 		if (conf->prolog_flags & PROLOG_FLAG_NOHOLD) {
 			conf->prolog_flags |= PROLOG_FLAG_ALLOC;
@@ -4788,6 +4793,8 @@ _validate_and_set_defaults(slurm_ctl_conf_t *conf, s_p_hashtbl_t *hashtbl)
 	(void) s_p_get_string(&conf->slurmd_logfile, "SlurmdLogFile", hashtbl);
 
 	(void) s_p_get_string(&conf->slurmd_params, "SlurmdParameters", hashtbl);
+	if (xstrcasestr(conf->slurmd_params, "config_overrides"))
+		conf->fast_schedule = 2;
 
 	if (!s_p_get_string(&conf->slurmd_pidfile, "SlurmdPidFile", hashtbl))
 		conf->slurmd_pidfile = xstrdup(DEFAULT_SLURMD_PIDFILE);

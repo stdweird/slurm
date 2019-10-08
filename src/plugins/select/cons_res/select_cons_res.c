@@ -1656,10 +1656,15 @@ top:	orig_map = bit_copy(save_bitmap);
 
 			if ((pass_count++ > preempt_reorder_cnt) ||
 			    (preemptee_cand_cnt <= pass_count)) {
-				/* Remove remaining jobs from preempt list */
+				/*
+				 * Ignore remaining jobs, but keep in the list
+				 * since the code can get called multiple times
+				 * for different node/feature sets --
+				 * _get_req_features().
+				 */
 				while ((tmp_job_ptr = (struct job_record *)
 					list_next(job_iterator))) {
-					(void) list_remove(job_iterator);
+					tmp_job_ptr->details->usable_nodes = 1;
 				}
 				break;
 			}
@@ -1725,6 +1730,8 @@ top:	orig_map = bit_copy(save_bitmap);
 				if (bit_overlap(bitmap,
 						tmp_job_ptr->node_bitmap) == 0)
 					continue;
+				if (tmp_job_ptr->details->usable_nodes)
+					break;
 				list_append(*preemptee_job_list,
 					    tmp_job_ptr);
 				remove_some_jobs = true;
@@ -1861,8 +1868,7 @@ static int _will_run_test(struct job_record *job_ptr, bitstr_t *bitmap,
 	job_iterator = list_iterator_create(job_list);
 	while ((tmp_job_ptr = (struct job_record *) list_next(job_iterator))) {
 		bool cleaning = _job_cleaning(tmp_job_ptr);
-		if (!cleaning && IS_JOB_COMPLETING(tmp_job_ptr))
-			cleaning = true;
+
 		if (!IS_JOB_RUNNING(tmp_job_ptr) &&
 		    !IS_JOB_SUSPENDED(tmp_job_ptr) &&
 		    !cleaning)

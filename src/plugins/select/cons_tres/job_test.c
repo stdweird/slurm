@@ -162,7 +162,7 @@ static avail_res_t **_get_res_avail(struct job_record *job_ptr,
 				    bitstr_t *node_map, bitstr_t **core_map,
 				    struct node_use_record *node_usage,
 				    uint16_t cr_type, bool test_only,
-				    bitstr_t **part_core_map);
+				    bool will_run, bitstr_t **part_core_map);
 static time_t _guess_job_end(struct job_record * job_ptr, time_t now);
 static int _handle_job_res(job_resources_t *job_resrcs_ptr,
 			   bitstr_t ***sys_resrcs_ptr,
@@ -192,7 +192,7 @@ static avail_res_t **_select_nodes(struct job_record *job_ptr,
 				uint32_t req_nodes,
 				bitstr_t *node_bitmap, bitstr_t **avail_core,
 				struct node_use_record *node_usage,
-				uint16_t cr_type, bool test_only,
+				uint16_t cr_type, bool test_only, bool will_run,
 				bitstr_t **part_core_map,
 				bool prefer_alloc_nodes,
 				gres_mc_data_t *tres_mc_ptr);
@@ -1283,7 +1283,7 @@ static int _job_test(struct job_record *job_ptr, bitstr_t *node_bitmap,
 	bitstr_t **free_cores_tmp = NULL,  *node_bitmap_tmp = NULL;
 	bitstr_t **free_cores_tmp2 = NULL, *node_bitmap_tmp2 = NULL;
 	bitstr_t **avail_cores, **free_cores;
-	bool test_only;
+	bool test_only, will_run;
 	uint32_t sockets_per_node = 1;
 	uint32_t c, j, n, c_alloc = 0, c_size, total_cpus;
 	uint64_t save_mem = 0, avail_mem = 0, needed_mem = 0, lowest_mem = 0;
@@ -1301,10 +1301,16 @@ static int _job_test(struct job_record *job_ptr, bitstr_t *node_bitmap,
 
 	free_job_resources(&job_ptr->job_resrcs);
 
-	if (mode == SELECT_MODE_TEST_ONLY)
+	if (mode == SELECT_MODE_TEST_ONLY) {
 		test_only = true;
-	else	/* SELECT_MODE_RUN_NOW || SELECT_MODE_WILL_RUN  */
+		will_run = false;
+	} else if (mode == SELECT_MODE_RUN_NOW) {
 		test_only = false;
+		will_run = false;
+	} else {	/* mode == SELECT_MODE_WILL_RUN */
+		test_only = false;
+		will_run = true;
+	}
 
 	/* check node_state and update the node_bitmap as necessary */
 	if (!test_only) {
@@ -1370,8 +1376,8 @@ static int _job_test(struct job_record *job_ptr, bitstr_t *node_bitmap,
 	avail_res_array = _select_nodes(job_ptr, min_nodes, max_nodes,
 					req_nodes, node_bitmap, free_cores,
 					node_usage, cr_type, test_only,
-					part_core_map, prefer_alloc_nodes,
-					tres_mc_ptr);
+					will_run, part_core_map,
+					prefer_alloc_nodes, tres_mc_ptr);
 	if (!avail_res_array) {
 		/* job can not fit */
 		xfree(tres_mc_ptr);
@@ -1488,8 +1494,8 @@ static int _job_test(struct job_record *job_ptr, bitstr_t *node_bitmap,
 	avail_res_array = _select_nodes(job_ptr, min_nodes, max_nodes,
 					req_nodes, node_bitmap, free_cores,
 					node_usage, cr_type, test_only,
-					part_core_map, prefer_alloc_nodes,
-					tres_mc_ptr);
+					will_run, part_core_map,
+					prefer_alloc_nodes, tres_mc_ptr);
 	if (avail_res_array && (job_ptr->best_switch)) {
 		/* job fits! We're done. */
 		if (select_debug_flags & DEBUG_FLAG_SELECT_TYPE) {
@@ -1581,8 +1587,8 @@ static int _job_test(struct job_record *job_ptr, bitstr_t *node_bitmap,
 	avail_res_array = _select_nodes(job_ptr, min_nodes, max_nodes,
 					req_nodes, node_bitmap, free_cores,
 					node_usage, cr_type, test_only,
-					part_core_map, prefer_alloc_nodes,
-					tres_mc_ptr);
+					will_run, part_core_map,
+					prefer_alloc_nodes, tres_mc_ptr);
 	if (!avail_res_array) {
 		/*
 		 * job needs resources that are currently in use by
@@ -1631,8 +1637,8 @@ static int _job_test(struct job_record *job_ptr, bitstr_t *node_bitmap,
 	avail_res_array = _select_nodes(job_ptr, min_nodes, max_nodes,
 					req_nodes, node_bitmap, free_cores,
 					node_usage, cr_type, test_only,
-					part_core_map, prefer_alloc_nodes,
-					tres_mc_ptr);
+					will_run, part_core_map,
+					prefer_alloc_nodes, tres_mc_ptr);
 	if (avail_res_array) {
 		/*
 		 * To the extent possible, remove from consideration resources
@@ -1666,7 +1672,7 @@ static int _job_test(struct job_record *job_ptr, bitstr_t *node_bitmap,
 						node_bitmap_tmp,
 						free_cores_tmp, node_usage,
 						cr_type, test_only,
-						part_core_map,
+						will_run, part_core_map,
 						prefer_alloc_nodes,
 						tres_mc_ptr);
 			if (!avail_res_array_tmp) {
@@ -1720,7 +1726,8 @@ static int _job_test(struct job_record *job_ptr, bitstr_t *node_bitmap,
 		avail_res_array = _select_nodes(job_ptr, min_nodes, max_nodes,
 						req_nodes, node_bitmap,
 						free_cores, node_usage, cr_type,
-						test_only, part_core_map,
+						test_only, will_run,
+						part_core_map,
 						prefer_alloc_nodes,
 						tres_mc_ptr);
 		if (avail_res_array &&
@@ -1751,7 +1758,8 @@ static int _job_test(struct job_record *job_ptr, bitstr_t *node_bitmap,
 		avail_res_array = _select_nodes(job_ptr, min_nodes, max_nodes,
 						req_nodes, node_bitmap,
 						free_cores, node_usage, cr_type,
-						test_only, part_core_map,
+						test_only, will_run,
+						part_core_map,
 						prefer_alloc_nodes,
 						tres_mc_ptr);
 		if (avail_res_array) {
@@ -1779,7 +1787,8 @@ static int _job_test(struct job_record *job_ptr, bitstr_t *node_bitmap,
 		avail_res_array = _select_nodes(job_ptr, min_nodes, max_nodes,
 						req_nodes, node_bitmap,
 						free_cores, node_usage, cr_type,
-						test_only, part_core_map,
+						test_only, will_run,
+						part_core_map,
 						prefer_alloc_nodes,
 						tres_mc_ptr);
 	}
@@ -5204,15 +5213,17 @@ fini:	if ((ec == SLURM_SUCCESS) && job_ptr->gres_list && orig_core_array) {
 			if (!bit_test(node_map, i)||
 			    !orig_core_array[i] || !avail_core[i])
 				continue;
-			count = bit_set_count(orig_core_array[i]) -
-				bit_set_count(avail_core[i]);
+			count = bit_set_count(avail_core[i]);
 			count *= select_node_record[i].vpus;
-			if (count > avail_res_array[i]->avail_cpus) {
+			avail_res_array[i]->avail_cpus = MIN(count, avail_res_array[i]->avail_cpus);
+			if (avail_res_array[i]->avail_cpus == 0) {
 				error("%s: %s: avail_cpus underflow for %pJ",
 				      plugin_type, __func__, job_ptr);
-				avail_res_array[i]->avail_cpus = 0;
-			} else {
-				avail_res_array[i]->avail_cpus -= count;
+				if (req_node_map && bit_test(req_node_map, i)) {
+					/* can't clear a required node! */
+					ec = SLURM_ERROR;
+				}
+				bit_clear(node_map, i);
 			}
 		}
 	}
@@ -5765,7 +5776,9 @@ extern uint64_t get_def_mem_per_gpu(List job_defaults_list)
  * IN node_i        - index of node to be evaluated
  * IN s_p_n         - Expected sockets_per_node (NO_VAL if not limited)
  * IN cr_type       - Consumable Resource setting
- * IN test_only     - ignore allocated memory check
+ * IN test_only     - Determine if job could ever run, ignore allocated memory
+ *		      check
+ * IN will_run      - Determining when a pending job can start
  * IN: part_core_map - per-node bitmap of cores allocated to jobs of this
  *                     partition or NULL if don't care
  * RET Available resources. Call _array() to release memory.
@@ -5778,7 +5791,7 @@ static avail_res_t *_can_job_run_on_node(struct job_record *job_ptr,
 				bitstr_t **core_map, const uint32_t node_i,
 				uint32_t s_p_n,
 				struct node_use_record *node_usage,
-				uint16_t cr_type, bool test_only,
+				uint16_t cr_type, bool test_only, bool will_run,
 				bitstr_t **part_core_map)
 {
 	uint16_t cpus = 0;
@@ -5793,7 +5806,7 @@ static avail_res_t *_can_job_run_on_node(struct job_record *job_ptr,
 	uint16_t min_cpus_per_node, ntasks_per_node = 1;
 
 	if (((job_ptr->bit_flags & BACKFILL_TEST) == 0) &&
-	    !test_only && IS_NODE_COMPLETING(node_ptr)) {
+	    !test_only && !will_run && IS_NODE_COMPLETING(node_ptr)) {
 		/*
 		 * Do not allocate more jobs to nodes with completing jobs,
 		 * backfill scheduler independently handles completing nodes
@@ -5943,9 +5956,15 @@ static avail_res_t *_can_job_run_on_node(struct job_record *job_ptr,
 		req_mem   = job_ptr->details->pn_min_memory & ~MEM_PER_CPU;
 		if (job_ptr->details->pn_min_memory & MEM_PER_CPU) {
 			/* memory is per-CPU */
-			if (!(cr_type & CR_CPU) && job_ptr->details->mc_ptr &&
-			    (job_ptr->details->mc_ptr->ntasks_per_core == 1) &&
-			    (job_ptr->details->cpus_per_task == 1)) {
+			if (((job_ptr->bit_flags & BF_WHOLE_NODE_TEST) == 0) &&
+			    ((req_mem * cpus) > avail_mem) &&
+			    (job_ptr->details->whole_node == 1)) {
+				cpus = 0;
+			} else if (!(cr_type & CR_CPU) &&
+				   job_ptr->details->mc_ptr &&
+				   (job_ptr->details->mc_ptr->
+				    ntasks_per_core == 1) &&
+				   job_ptr->details->cpus_per_task == 1) {
 				/*
 				 * In this scenario, CPUs represents cores and
 				 * the CPU/core count will be inflated later on
@@ -6049,7 +6068,9 @@ static void _set_gpu_defaults(struct job_record *job_ptr)
  * IN/OUT: core_map  - per-node bitmaps of available cores
  * IN: cr_node_cnt   - total number of nodes in the cluster
  * IN: cr_type       - resource type
- * IN: test_only     - ignore allocated memory check
+ * IN: test_only     - Determine if job could ever run, ignore allocated memory
+ *		       check
+ * IN: will_run      - Determining when a pending job can start
  * IN: part_core_map - per-node bitmap of cores allocated to jobs of this
  *                     partition or NULL if don't care
  * RET array of avail_res_t pointers, free using _free_avail_res_array()
@@ -6058,7 +6079,7 @@ static avail_res_t **_get_res_avail(struct job_record *job_ptr,
 				    bitstr_t *node_map, bitstr_t **core_map,
 				    struct node_use_record *node_usage,
 				    uint16_t cr_type, bool test_only,
-				    bitstr_t **part_core_map)
+				    bool will_run, bitstr_t **part_core_map)
 {
 	int i, i_first, i_last;
 	avail_res_t **avail_res_array = NULL;
@@ -6077,6 +6098,7 @@ static avail_res_t **_get_res_avail(struct job_record *job_ptr,
 		avail_res_array[i] = _can_job_run_on_node(job_ptr, core_map, i,
 							  s_p_n, node_usage,
 							  cr_type, test_only,
+							  will_run,
 							  part_core_map);
 	}
 
@@ -6092,7 +6114,9 @@ static avail_res_t **_get_res_avail(struct job_record *job_ptr,
  * IN/OUT: node_bitmap - bitmap of available nodes / bitmap of selected nodes
  * IN/OUT: avail_core - available/selected cores
  * IN: cr_type      - resource type
- * IN: test_only    - ignore allocated memory check
+ * IN: test_only     - Determine if job could ever run, ignore allocated memory
+ *		       check
+ * IN: will_run      - Determining when a pending job can start
  * IN: part_core_map - per-node bitmap of cores allocated to jobs of this
  *                     partition or NULL if don't care
  * IN: prefer_alloc_nodes - select currently allocated nodes first
@@ -6105,7 +6129,7 @@ static avail_res_t **_select_nodes(struct job_record *job_ptr,
 				uint32_t req_nodes,
 				bitstr_t *node_bitmap, bitstr_t **avail_core,
 				struct node_use_record *node_usage,
-				uint16_t cr_type, bool test_only,
+				uint16_t cr_type, bool test_only, bool will_run,
 				bitstr_t **part_core_map,
 				bool prefer_alloc_nodes,
 				gres_mc_data_t *tres_mc_ptr)
@@ -6128,7 +6152,7 @@ static avail_res_t **_select_nodes(struct job_record *job_ptr,
 	/* Determine resource availability on each node for pending job */
 	avail_res_array = _get_res_avail(job_ptr, node_bitmap, avail_core,
 					 node_usage, cr_type, test_only,
-					 part_core_map);
+					 will_run, part_core_map);
 	if (!avail_res_array)
 		return avail_res_array;
 
@@ -6494,10 +6518,15 @@ top:	orig_node_map = bit_copy(save_node_map);
 
 			if ((pass_count++ > preempt_reorder_cnt) ||
 			    (preemptee_cand_cnt <= pass_count)) {
-				/* Remove remaining jobs from preempt list */
+				/*
+				 * Ignore remaining jobs, but keep in the list
+				 * since the code can get called multiple times
+				 * for different node/feature sets --
+				 * _get_req_features().
+				 */
 				while ((tmp_job_ptr = (struct job_record *)
 					list_next(job_iterator))) {
-					(void) list_remove(job_iterator);
+					tmp_job_ptr->details->usable_nodes = 1;
 				}
 				break;
 			}
@@ -6571,6 +6600,8 @@ top:	orig_node_map = bit_copy(save_node_map);
 				if (bit_overlap(node_bitmap,
 						tmp_job_ptr->node_bitmap) == 0)
 					continue;
+				if (tmp_job_ptr->details->usable_nodes)
+					break;
 				list_append(*preemptee_job_list,
 					    tmp_job_ptr);
 				remove_some_jobs = true;
@@ -6726,8 +6757,7 @@ extern int will_run_test(struct job_record *job_ptr, bitstr_t *node_bitmap,
 	job_iterator = list_iterator_create(job_list);
 	while ((tmp_job_ptr = (struct job_record *) list_next(job_iterator))) {
 		bool cleaning = job_cleaning(tmp_job_ptr);
-		if (!cleaning && IS_JOB_COMPLETING(tmp_job_ptr))
-			cleaning = true;
+
 		if (!IS_JOB_RUNNING(tmp_job_ptr) &&
 		    !IS_JOB_SUSPENDED(tmp_job_ptr) &&
 		    !cleaning)

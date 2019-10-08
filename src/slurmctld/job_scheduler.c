@@ -791,7 +791,7 @@ extern int schedule(uint32_t job_limit)
 		sched_job_limit += job_limit;	/* test more jobs */
 
 	if (delta_t >= sched_min_interval) {
-		/* Temporariy set time in the future until we get the real
+		/* Temporarily set time in the future until we get the real
 		 * scheduler completion time */
 		sched_last.tv_sec  = now.tv_sec;
 		sched_last.tv_usec = now.tv_usec;
@@ -2418,7 +2418,17 @@ extern void launch_job(struct job_record *job_ptr)
 	struct node_record *node_ptr;
 #endif
 
+	xassert(job_ptr);
+	xassert(job_ptr->batch_flag);
+
 	if (job_ptr->total_cpus == 0)
+		return;
+
+	launch_job_ptr = _pack_job_ready(job_ptr);
+	if (!launch_job_ptr)
+		return;
+
+	if (pick_batch_host(launch_job_ptr) != SLURM_SUCCESS)
 		return;
 
 #ifdef HAVE_FRONT_END
@@ -2430,12 +2440,8 @@ extern void launch_job(struct job_record *job_ptr)
 	if (node_ptr)
 		protocol_version = node_ptr->protocol_version;
 #endif
-	launch_job_ptr = _pack_job_ready(job_ptr);
-	if (!launch_job_ptr)
-		return;
 
-	if (pick_batch_host(launch_job_ptr) != SLURM_SUCCESS)
-		return;
+	(void)build_batch_step(job_ptr);
 
 	launch_msg_ptr = _build_launch_job_msg(launch_job_ptr,protocol_version);
 	if (launch_msg_ptr == NULL)

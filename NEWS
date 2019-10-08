@@ -1,6 +1,81 @@
 This file describes changes in recent versions of Slurm. It primarily
 documents those changes that are of interest to users and administrators.
 
+* Changes in Slurm 19.05.3-2
+============================
+ -- Fix missing include for Cray Aries systems.
+
+* Changes in Slurm 19.05.3
+==========================
+ -- Fix missing check from conversion of cray -> cray_aries.
+ -- Improve job state reason string when required nodes are not available by
+    not including those that don't belong to the job partition.
+ -- Set a more appropriate ESLURM_RESERVATION_MAINT job state reason for jobs
+    requesting feature(s) and required nodes are in a maintenance reservation.
+ -- Fix logic to better handle maintenance reservations.
+ -- Add spank options to cache in remote callback.
+ -- Enforce the use of spank_option_getopt().
+ -- Fix select plugins' will run test under-allocating nodes usage for
+    completing jobs.
+ -- Nodes in COMPLETING state treated as being currently available for job
+    will-run test.
+ -- Cray - fix contribs slurm.conf.j2 with updated cray_aries plugin names.
+ -- job_submit/lua - fix problem where nil was expected for min_mem_per_cpu.
+ -- Fix extra, unaccounted TRESRunMins usage created by heterogeneous jobs when
+    running with the priority/multifactor plugin.
+ -- Detach threads once they are done to avoid having to join them
+    in track scripts code.
+ -- Handle situation where a slurmctld tries to communicate with slurmdbd more
+    than once at the same time.
+ -- Fix XOR/XAND features like cpu&fastio&[knl|westmere] to be resolved
+    correctly.
+ -- Don't update [min|max]_exit_code on job array task requeue.
+ -- Don't assume the first node of a job is the batch host when testing if the
+    job's allocated nodes are booted/ready.
+ -- Make --batch=<feature> requests wait for all nodes to be booted so that it
+    can choose the batch host after the nodes have been booted -- possibly with
+    different features.
+ -- Fix talking to batch host on it's protocol version when using --batch.
+ -- gres/mic plugin - add missing fini() function to clean up plugin state.
+ -- Move _validate_node_choice() before prolog/epilog check.
+ -- Look forward one week while create new reservation.
+ -- Set mising resv_desc.flags before call _select_nodes().
+ -- Use correct start_time for TIME_FLOAT reservation in _job_overlap().
+ -- Properly enforce a job's mem-per-cpu option when allocate the node
+    exclusively to that job.
+ -- sched/backfill - clear estimated sched_nodes as done for start_time.
+ -- Have safe_[read|write] handle EAGAIN and EINTR.
+ -- Fix checking for flag with logical AND.
+ -- Correct "extern" definition of variable if compiling with __APPLE__.
+ -- Deprecate FastSchedule. FastSchedule will be removed in 20.02.
+    The FastSchedule=2 functionality (used for testing and development) has
+    been retained as the new SlurmdParameters=config_overrides option.
+ -- Fix preemption issue when picking nodes for a feature job request.
+ -- Fix race condition preventing held array job from getting a db_index.
+ -- Fix select/cons_tres gres code infinite loop leaving slurmctld unresponsive.
+ -- Remove redefinition of global variable in gres.c
+ -- Fix issue where GPU devices are denied access when MPS is enabled.
+ -- Fix uninitialized errors when compiling with CFLAGS="--coverage".
+ -- Fix scancel --full for proctrack/cgroups.
+ -- Fix sdiag backfill last and mean queue length stats.
+ -- Do not remove batch host when resizing/shrinking a batch job.
+ -- nss_slurm - fix file descriptor leaks.
+ -- Fix preemption for jobs using complex feature requests
+    (e.g. -C "[rack1*2&rack2*4]").
+ -- Fix memory leaks in preemption when jobs request multiple features.
+ -- Allow Operator users to show/fix runaways.
+ -- Disallow coordinators to show/fix runaways.
+ -- mpi/pmi2 - increase array len to avoid buffer size exceeded error.
+ -- Preserve rebooting node's nextstate when updating state with scontrol.
+ -- Fully merge slurm.conf and gres.conf before node_config_load().
+ -- Remove FastSchedule dependence from gres.conf's AutoDetect=nvml.
+ -- Forbid mix of typed and untyped GRES of same name in slurm.conf.
+ -- cons_tres: Prevent creating a job without CPUs.
+ -- Prevent underflow when filtering cores with gres.
+ -- proctrack/cray_aries: use current pid instead of thread if we're in a fork.
+ -- Fix missing check for prolog launch credential creation failure that can
+    lead to segfaults.
+
 * Changes in Slurm 19.05.2
 ==========================
  -- Wrap END_TIMER{,2,3} macro definition in "do {} while (0)" block.
