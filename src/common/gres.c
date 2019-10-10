@@ -1744,6 +1744,8 @@ extern int gres_plugin_node_config_load(uint32_t cpu_cnt, char *node_name,
 				     &gres_context[i]);
 	}
 
+	if (run_in_daemon("slurmstepd"))
+	    goto fini;
 	/* Merge slurm.conf and gres.conf together into gres_conf_list */
 	_merge_config(&node_conf, gres_conf_list, gres_list);
 
@@ -1763,6 +1765,7 @@ extern int gres_plugin_node_config_load(uint32_t cpu_cnt, char *node_name,
 		_remove_fileless_gpus(gres_conf_list, &gres_context[i]);
 	}
 
+fini:
 	list_for_each(gres_conf_list, _log_gres_slurmd_conf, NULL);
 	slurm_mutex_unlock(&gres_context_lock);
 
