@@ -1,4 +1,4 @@
-.TH "slurm.conf" "5" "Slurm Configuration File" "September 2019" "Slurm Configuration File"
+.TH "slurm.conf" "5" "Slurm Configuration File" "October 2019" "Slurm Configuration File"
 
 .SH "NAME"
 slurm.conf \- Slurm configuration file
@@ -388,9 +388,14 @@ This configuration parameter is also applied to launch tasks and avoid aborting
 
 .TP
 \fBBurstBufferType\fR
-The plugin used to manage burst buffers.
-Acceptable values at present include "burst_buffer/none".
-More information later...
+The plugin used to manage burst buffers. Acceptable values at present are:
+.RS
+.TP
+\fBburst_buffer/datawrap\fR
+Use Cray DataWarp API to provide burst buffer functionality.
+.TP
+\fBburst_buffer/none\fR
+.RE
 
 .TP
 \fBCheckpointType\fR
@@ -1290,6 +1295,11 @@ Allow jobs on a Cray Native cluster exclusive access to network resources.
 This should only be set on clusters providing exclusive access to each
 node to a single job at once, and not using parallel steps within the job,
 otherwise resources on the node can be oversubscribed.
+.TP 24
+\fBenable_nss_slurm\fR
+Permits passwd and group resolution for a job to be serviced by slurmstepd rather
+than requiring a lookup from a network based service. See
+https://slurm.schedmd.com/nss_slurm.html for more information.
 .TP 24
 \fBlustre_no_flush\fR
 If set on a Cray Native cluster, then do not flush the Lustre cache on job step
@@ -3005,6 +3015,11 @@ If used, any job started on node that fails to load the env from a node will
 fail instead of using the cached env.  This will also implicitly imply the
 requeue_setup_env_fail option as well.
 .TP
+\fBnohold_on_prolog_fail\fR
+By default, if the Prolog exits with a non-zero value the job is requeued in
+a held state. By specifying this parameter the job will be requeued but not
+held so that the scheduler can dispatch it to another host.
+.TP
 \fBpack_serial_at_end\fR
 If used with the select/cons_res or select/cons_tres plugin,
 then put serial jobs at the end of
@@ -3044,11 +3059,6 @@ select/cons_tres plugins.
 If set, then the preemption sorting algorithm will be changed to sort by the
 job start times to favor preempting younger jobs over older. (Requires
 preempt/partition_prio or preempt/qos plugins.)
-.TP
-\fBnohold_on_prolog_fail\fR
-By default if the Prolog exits with a non-zero value the job is requeued in
-held state. By specifying this parameter the job will be requeued but not
-held so that the scheduler can dispatch it to another host.
 .TP
 \fBreduce_completing_frag\fR
 This option is used to control how scheduling of resources is performed when
@@ -5219,7 +5229,7 @@ See also the related "Alternate" keyword.
 .RS
 .TP 10
 \fBUP\fP
-Designates that new jobs may queued on the partition, and that
+Designates that new jobs may be queued on the partition, and that
 jobs may be allocated nodes and run from the partition.
 .TP
 \fBDOWN\fP

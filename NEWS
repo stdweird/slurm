@@ -1,6 +1,30 @@
 This file describes changes in recent versions of Slurm. It primarily
 documents those changes that are of interest to users and administrators.
 
+* Changes in Slurm 19.05.4
+==========================
+ -- Don't allow empty string as a reservation name; generate a name if empty
+    string is provided.
+ -- Fix salloc segfault when using --no-shell option.
+ -- Fix divide by zero when normalizing partition priorities.
+ -- Restore ability to set JobPriorityFactor to 0 on a partition.
+ -- Fix multi-partition non-normalized job priorities.
+ -- Adjust precedence between --mem-per-cpu and --mem-per-node to enforce
+    them as mutually exclusive. Specifying either on the command line will
+    now explicitly override any value inherited through the environment.
+ -- Always print node's version, if it exists, in scontrol show nodes.
+ -- sbatch - ensure SLURM_NTASKS_PER_NODE is exported when --ntasks-per-node
+    is set.
+ -- slurmctld - fix memory leak when using DebugFlags=Reservation.
+ -- Reset --mem and --mem-per-cpu options correctly when using --mem-per-gpu.
+ -- Use correct function signature for step_set_env() in gres plugin interface.
+ -- Restore pre-19.05 hostname handling behavior for AllocNodes by always
+    truncating to just the host portion and dropping any domain name portion
+    returned by gethostbyaddr().
+ -- Fix abort initializing a configuration without acct_gather.conf.
+ -- Fix GRES binding and CLOUD nodes GRES setup regressions.
+ -- Make sview work with glib2 v2.62.
+
 * Changes in Slurm 19.05.3-2
 ============================
  -- Fix missing include for Cray Aries systems.
@@ -455,6 +479,7 @@ documents those changes that are of interest to users and administrators.
 * Changes in Slurm 18.08.9
 ==========================
  -- Wrap END_TIMER{,2,3} macro definition in "do {} while (0)" block.
+ -- Make sview work with glib2 v2.62.
 
 * Changes in Slurm 18.08.8
 ==========================
