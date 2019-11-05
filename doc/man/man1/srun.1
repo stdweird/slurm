@@ -1123,12 +1123,10 @@ This option applies only to job allocations.
 Note that the SlurmDBD must be up for this option to work properly.
 
 .TP
-.na
 \fB\-m\fR, \fB\-\-distribution\fR=
 \fI*\fR|\fIblock\fR|\fIcyclic\fR|\fIarbitrary\fR|\fIplane=<options>
 \fR[:\fI*\fR|\fIblock\fR|\fIcyclic\fR|\fIfcyclic\fR[:\fI*\fR|\fIblock\fR|
 \fIcyclic\fR|\fIfcyclic\fR]][,\fIPack\fR|\fINoPack\fR]
-.ad
 
 Specify alternate distribution methods for remote processes.
 This option controls the distribution of tasks to the nodes on which
@@ -1320,7 +1318,10 @@ to the amount of memory allocated to the job, but not remove any of the job's
 memory allocation from being available to other job steps.
 Also see \fB\-\-mem\-per\-cpu\fR and \fB\-\-mem\-per\-gpu\fR.
 The \fB\-\-mem\fR, \fB\-\-mem\-per\-cpu\fR and \fB\-\-mem\-per\-gpu\fR
-options are mutually exclusive.
+options are mutually exclusive. If \fB\-\-mem\fR, \fB\-\-mem\-per\-cpu\fR or
+\fB\-\-mem\-per\-gpu\fR are specified as command line arguments, then they will
+take precedence over the environment (potentially inherited from \fBsalloc\fR
+or \fBsbatch\fR).
 
 NOTE: A memory size specification of zero is treated as a special case and
 grants the job access to all of the memory on each node for newly submitted jobs
