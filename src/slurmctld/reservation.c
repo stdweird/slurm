@@ -1798,6 +1798,7 @@ static bool _job_overlap(time_t start_time, uint32_t flags,
 		return overlap;
 	if (flags & RESERVE_FLAG_TIME_FLOAT)
 		start_time += time(NULL);
+
 	job_iterator = list_iterator_create(job_list);
 	while ((job_ptr = (struct job_record *) list_next(job_iterator))) {
 		if (IS_JOB_RUNNING(job_ptr)		&&
@@ -2215,6 +2216,8 @@ extern int create_resv(resv_desc_msg_t *resv_desc_ptr)
 			    (resv_desc_ptr->flags & RESERVE_FLAG_PART_NODES)) {
 				node_bitmap = bit_copy(part_ptr->node_bitmap);
 			} else {
+				resv_desc_ptr->flags &=
+					(~RESERVE_FLAG_PART_NODES);
 				resv_desc_ptr->flags |= RESERVE_FLAG_ALL_NODES;
 				node_bitmap = bit_alloc(node_record_count);
 				bit_nset(node_bitmap, 0,(node_record_count-1));
@@ -2223,6 +2226,7 @@ extern int create_resv(resv_desc_msg_t *resv_desc_ptr)
 			resv_desc_ptr->node_list =
 				bitmap2node_name(node_bitmap);
 		} else {
+			resv_desc_ptr->flags &= (~RESERVE_FLAG_PART_NODES);
 			if (node_name2bitmap(resv_desc_ptr->node_list,
 					    false, &node_bitmap)) {
 				rc = ESLURM_INVALID_NODE_NAME;
@@ -2244,12 +2248,23 @@ extern int create_resv(resv_desc_msg_t *resv_desc_ptr)
 		}
 		total_node_cnt = bit_set_count(node_bitmap);
 		if (!(resv_desc_ptr->flags & RESERVE_FLAG_IGN_JOBS) &&
-		    !resv_desc_ptr->core_cnt &&
-		    _job_overlap(resv_desc_ptr->start_time - now,
-				 resv_desc_ptr->flags, node_bitmap, NULL)) {
-			info("Reservation request overlaps jobs");
-			rc = ESLURM_NODES_BUSY;
-			goto bad_parse;
+		    !resv_desc_ptr->core_cnt) {
+			uint32_t flags = resv_desc_ptr->flags;
+
+			/*
+			 * Need to clear this flag before _job_overlap()
+			 * which would otherwise add the current time
+			 * on to the start_time. start_time for floating
+			 * reservations has already been set to now.
+			 */
+			flags &= ~RESERVE_FLAG_TIME_FLOAT;
+
+			if (_job_overlap(resv_desc_ptr->start_time, flags,
+					 node_bitmap, NULL)) {
+				info("Reservation request overlaps jobs");
+				rc = ESLURM_NODES_BUSY;
+				goto bad_parse;
+			}
 		}
 		/* We do allow to request cores with nodelist */
 		if (resv_desc_ptr->core_cnt) {
@@ -2275,6 +2290,8 @@ extern int create_resv(resv_desc_msg_t *resv_desc_ptr)
 				goto bad_parse;
 		}
 	} else if (!(resv_desc_ptr->flags & RESERVE_FLAG_ANY_NODES)) {
+		resv_desc_ptr->flags &= (~RESERVE_FLAG_PART_NODES);
+
 		if ((!resv_desc_ptr->node_cnt || !resv_desc_ptr->node_cnt[0]) &&
 		    !resv_desc_ptr->core_cnt) {
 			info("Reservation request lacks node specification");

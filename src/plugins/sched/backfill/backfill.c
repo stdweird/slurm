@@ -638,7 +638,7 @@ static uint32_t _my_sleep(int64_t usec)
 
 static void _load_config(void)
 {
-	char *sched_params, *tmp_ptr;
+	char *sched_params, *tmp_ptr, *tmp_str = NULL;
 
 	sched_params = slurm_get_sched_params();
 	debug_flags  = slurm_get_debug_flags();
@@ -680,8 +680,13 @@ static void _load_config(void)
 
 	if ((tmp_ptr = xstrcasestr(sched_params, "bf_max_job_test=")))
 		max_backfill_job_cnt = atoi(tmp_ptr + 16);
+	else if ((tmp_ptr = xstrcasestr(sched_params, "max_job_bf="))) {
+		error("Invalid parameter max_job_bf. The option is no longer supported, please use bf_max_job_test instead.");
+		max_backfill_job_cnt = atoi(tmp_ptr + 11);
+	}
 	else
 		max_backfill_job_cnt = 100;
+
 	if (max_backfill_job_cnt < 1 ||
 	    max_backfill_job_cnt > MAX_BF_MAX_JOB_TEST) {
 		error("Invalid SchedulerParameters bf_max_job_test: %d",
@@ -869,7 +874,8 @@ static void _load_config(void)
 	}
 
 	bf_hetjob_prio = 0;
-	if ((tmp_ptr = xstrcasestr(sched_params, "bf_hetjob_prio="))) {
+	tmp_str = xstrdup(sched_params);
+	if ((tmp_ptr = xstrcasestr(tmp_str, "bf_hetjob_prio="))) {
 		tmp_ptr = strtok(tmp_ptr + 15, ",");
 		if (!xstrcasecmp(tmp_ptr, "min"))
 			bf_hetjob_prio |= HETJOB_PRIO_MIN;
@@ -881,6 +887,7 @@ static void _load_config(void)
 			error("Invalid SchedulerParameters bf_hetjob_prio: %s",
 			      tmp_ptr);
 	}
+	xfree(tmp_str);
 
 	bf_hetjob_immediate = false;
 	if (xstrcasestr(sched_params, "bf_hetjob_immediate"))
@@ -1491,7 +1498,7 @@ static int _attempt_backfill(void)
 	job_queue_rec_t *job_queue_rec;
 	int bb, i, j, node_space_recs, mcs_select = 0;
 	slurmdb_qos_rec_t *qos_ptr = NULL;
-	struct job_record *job_ptr;
+	struct job_record *job_ptr = NULL;
 	struct part_record *part_ptr;
 	uint32_t end_time, end_reserve, deadline_time_limit, boot_time;
 	uint32_t orig_end_time;
@@ -1506,7 +1513,7 @@ static int _attempt_backfill(void)
 	int rc = 0, error_code;
 	int job_test_count = 0, test_time_count = 0, pend_time;
 	bool already_counted, many_rpcs = false;
-	uint32_t reject_array_job_id = 0;
+	struct job_record *reject_array_job = NULL;
 	struct part_record *reject_array_part = NULL;
 	uint32_t start_time;
 	time_t config_update = slurmctld_conf.last_update;
@@ -1607,6 +1614,9 @@ static int _attempt_backfill(void)
 			prio_reserve;
 		bool get_boot_time = false;
 
+		/* Run some final guaranteed logic after each job iteration */
+		if (job_ptr)
+			fill_array_reasons(job_ptr, reject_array_job);
 		job_queue_rec = (job_queue_rec_t *) list_pop(job_queue);
 		if (!job_queue_rec) {
 			if (debug_flags & DEBUG_FLAG_BACKFILL)
@@ -1858,13 +1868,15 @@ next_task:
 		if (!_job_part_valid(job_ptr, part_ptr))
 			continue;	/* Partition change during lock yield */
 		if ((job_ptr->array_task_id != NO_VAL) || job_ptr->array_recs) {
-			if ((reject_array_job_id == job_ptr->array_job_id) &&
-			    (reject_array_part   == part_ptr))
+			if (reject_array_job &&
+			    (reject_array_job->array_job_id ==
+				job_ptr->array_job_id) &&
+			    (reject_array_part == part_ptr))
 				continue;  /* already rejected array element */
 
 			/* assume reject whole array for now, clear if OK */
-			reject_array_job_id = job_ptr->array_job_id;
-			reject_array_part   = part_ptr;
+			reject_array_job = job_ptr;
+			reject_array_part = part_ptr;
 
 			if (!job_array_start_test(job_ptr))
 				continue;
@@ -2408,8 +2420,10 @@ skip_start:
 				later_start = 0;
 			} else {
 				/* Started this job, move to next one */
-				reject_array_job_id = 0;
-				reject_array_part   = NULL;
+
+				/* Clear assumed rejected array status */
+				reject_array_job = NULL;
+				reject_array_part = NULL;
 
 				/* Update the database if job time limit
 				 * changed and move to next job */
@@ -2619,10 +2633,16 @@ skip_start:
 			job_ptr->part_ptr->bf_data->resv_usage->count++;
 		}
 
-		reject_array_job_id = 0;
-		reject_array_part   = NULL;
-		xfree(job_ptr->sched_nodes);
-		job_ptr->sched_nodes = bitmap2node_name(avail_bitmap);
+		/* Clear assumed rejected array status */
+		reject_array_job = NULL;
+		reject_array_part = NULL;
+
+		if ((orig_start_time == 0) ||
+		    (job_ptr->start_time < orig_start_time)) {
+			/* Can't start earlier in different partition. */
+			xfree(job_ptr->sched_nodes);
+			job_ptr->sched_nodes = bitmap2node_name(avail_bitmap);
+		}
 		bit_not(avail_bitmap);
 		_add_reservation(start_time, end_reserve,
 				 avail_bitmap, node_space, &node_space_recs);
@@ -3406,7 +3426,6 @@ static int _pack_start_now(pack_job_map_t *map, node_space_map_t *node_space)
 				bit_or(used_bitmap, job_ptr->node_bitmap);
 		} else {
 			fed_mgr_job_unlock(job_ptr);
-			error("%pJ failed to start", job_ptr);
 			break;
 		}
 		if (job_ptr->time_min) {
