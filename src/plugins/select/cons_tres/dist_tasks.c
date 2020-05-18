@@ -576,6 +576,29 @@ static bool _tres_tasks_avail(uint32_t *gres_task_limit,
 	return false;
 }
 
+/* At tasks_per_node limit for given node */
+static bool _at_tpn_limit(const uint32_t n, const struct job_record *job_ptr,
+			  const char *tag, bool log_error)
+{
+	const job_resources_t *job_res = job_ptr->job_resrcs;
+	const log_level_t log_lvl = log_error ? LOG_LEVEL_ERROR :
+						LOG_LEVEL_INFO;
+
+	if (job_ptr->details->ntasks_per_node == 0)
+		return false;
+
+	if (job_res->tasks_per_node[n] < job_ptr->details->ntasks_per_node)
+		return false;
+
+	if (log_error || (select_debug_flags & DEBUG_FLAG_SELECT_TYPE))
+		log_var(log_lvl,
+			"%s: %s over tasks_per_node for %pJ node:%u task_per_node:%d max:%" PRIu16,
+			__func__, tag, job_ptr, n, job_res->tasks_per_node[n],
+			job_ptr->details->ntasks_per_node);
+
+	return true;
+}
+
 /*
  * _compute_task_c_b_task_dist - compute the number of tasks on each
  * of the node for the cyclic and block distribution. We need to do
@@ -691,7 +714,11 @@ static int _compute_c_b_task_dist(struct job_record *job_ptr,
 			    ((avail_cpus[n] - job_res->cpus[n]) <
 			     job_ptr->details->cpus_per_task))
 				break;
-			if (!_tres_tasks_avail(gres_task_limit, job_res, n))
+			if (!over_subscribe &&
+			    !_tres_tasks_avail(gres_task_limit, job_res, n))
+				break;
+			if (!over_subscribe &&
+			    _at_tpn_limit(n, job_ptr, "fill allocated", false))
 				break;
 			tid++;
 			job_res->tasks_per_node[n]++;
@@ -730,13 +757,18 @@ static int _compute_c_b_task_dist(struct job_record *job_ptr,
 			rem_tasks = vpus[n] / job_ptr->details->cpus_per_task;
 			rem_tasks = MAX(rem_tasks, 1);
 			for (t = 0; ((t < rem_tasks) && (tid < maxtasks)); t++){
-				if (!over_subscribe &&
-				    ((avail_cpus[n] - job_res->cpus[n]) <
-				     job_ptr->details->cpus_per_task))
-					break;
-				if (!_tres_tasks_avail(gres_task_limit,
-						       job_res, n))
-					break;
+				if (!over_subscribe) {
+					if ((avail_cpus[n] - job_res->cpus[n]) <
+					    job_ptr->details->cpus_per_task)
+						break;
+					if (!_tres_tasks_avail(gres_task_limit,
+							       job_res, n))
+						break;
+					if (_at_tpn_limit(n, job_ptr,
+							  "fill additional",
+							  false))
+						break;
+				}
 				tid++;
 				job_res->tasks_per_node[n]++;
 				for (l = 0; l < job_ptr->details->cpus_per_task;
@@ -764,15 +796,27 @@ static int _compute_c_b_task_dist(struct job_record *job_ptr,
 	while (tid < maxtasks) {
 		bool more_tres_tasks = false;
 		for (n = 0; ((n < job_res->nhosts) && (tid < maxtasks)); n++) {
-			if (test_tres_tasks &&
-			    !_tres_tasks_avail(gres_task_limit, job_res, n))
-				continue;
+			if (test_tres_tasks) {
+				if (!_tres_tasks_avail(gres_task_limit,
+						       job_res, n))
+					continue;
+				if (_at_tpn_limit(n, job_ptr,
+						  "fill non-dedicated CPUs",
+						  true))
+					continue;
+			}
 			more_tres_tasks = true;
 			tid++;
 			job_res->tasks_per_node[n]++;
 		}
-		if (!more_tres_tasks)
-			test_tres_tasks = false;
+		if (!more_tres_tasks) {
+			if (!test_tres_tasks) {
+				error("%s: failed to find additional placement for task %u for %pJ",
+				      __func__, tid, job_ptr);
+				return SLURM_ERROR;
+			} else
+				test_tres_tasks = false;
+		}
 	}
 
 	return SLURM_SUCCESS;
@@ -1058,7 +1102,7 @@ static int _cyclic_sync_core_bitmap(struct job_record *job_ptr,
 				     j++, k++) {
 					if (!bit_test(core_map, k))
 						continue;
-					if (sock_str)
+					if (core_str)
 						sep = ",";
 					else
 						sep = "";
