@@ -28,7 +28,7 @@ cp $SPEC "SPECS"
 
 # TODO: what if more than one cuda is available/installed, then the * thingies will probably not work
 # pmix-3 as rebuild from github src.rpm includes the devel rpms in the rpm
-sudo yum remove nvidia-driver-devel cuda-nvml-dev-10-2 nvidia-driver-NVML 
+sudo yum remove -y nvidia-driver-devel cuda-nvml-dev-10-2 nvidia-driver-NVML 
 sudo yum install ucx-devel "pmix-devel > 3.0.0" numactl-devel hwloc-devel
 
 # remove json-c12 -> use plain json-c
