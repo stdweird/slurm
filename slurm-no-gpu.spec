@@ -1,6 +1,6 @@
 Name:		slurm
 Version:	19.05.7
-%global rel 2
+%global rel 3
 Release:    %{rel}.%{gittag}%{?dist}.nogpu.ug
 Summary:	Slurm Workload Manager
 
@@ -131,7 +131,7 @@ BuildRequires: numactl-devel
 %endif
 
 %if %{with pmix}
-BuildRequires: pmix
+BuildRequires: pmix-devel
 %global pmix_version %(rpm -q pmix --qf "%%{VERSION}")
 %endif
 
@@ -226,7 +226,7 @@ Summary: Slurm compute node daemon
 Group: System Environment/Base
 Requires: %{name}%{?_isa} = %{version}-%{release}
 %if %{with pmix}
-Requires: pmix = %{pmix_version}
+Requires: pmix-devel = %{pmix_version}
 %endif
 %if %{with ucx}
 # only the devel rpm from EPEL provides the reuqired .so files
