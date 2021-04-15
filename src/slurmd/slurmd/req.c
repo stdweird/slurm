@@ -134,21 +134,6 @@ typedef struct {
 	pthread_mutex_t *timer_mutex;
 } timer_struct_t;
 
-typedef struct {
-	char **gres_job_env;
-	uint32_t jobid;
-	uint32_t step_id;
-	char *node_list;
-	uint32_t pack_jobid;
-	char *partition;
-	char *resv_id;
-	char **spank_job_env;
-	uint32_t spank_job_env_size;
-	uid_t uid;
-	char *user_name;
-    uint16_t job_node_cpus;  /* Number of CPUs used by the job on this node */
-} job_env_t;
-
 static int  _abort_step(uint32_t job_id, uint32_t step_id);
 static char **_build_env(job_env_t *job_env, bool is_epilog);
 static void _delay_rpc(int host_inx, int host_cnt, int usec_per_rpc);
@@ -4756,7 +4741,7 @@ static int _epilog_complete(uint32_t jobid, int rc)
 		error("Unable to send epilog complete message: %m");
 		return SLURM_ERROR;
 	}
-	
+
 	debug("JobId=%u: sent epilog complete msg: rc = %d", jobid, rc);
 
 	return SLURM_SUCCESS;
@@ -5355,7 +5340,7 @@ _rpc_terminate_job(slurm_msg_t *msg)
 	job_env.spank_job_env_size = req->spank_job_env_size;
 	job_env.uid = req->job_uid;
 	job_env.gid = req->job_gid;
-	
+
     node_inx = _get_node_inx(req->nodes);
     job_env.job_node_cpus = (node_inx >= 0 ? req->job_node_cpus[node_inx] : 0);
     debug2("Setting job_env.job_cpu_nodes to %d", job_env.job_node_cpus);
