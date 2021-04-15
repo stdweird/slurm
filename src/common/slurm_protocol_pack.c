@@ -2923,6 +2923,9 @@ _unpack_kill_job_msg(kill_job_msg_t ** msg, Buf buffer,
 			goto unpack_error;
 		safe_unpackstr_array(&tmp_ptr->spank_job_env,
 				     &tmp_ptr->spank_job_env_size, buffer);
+		safe_unpack16_array(&tmp_ptr->job_node_cpus,
+		             &tmp_ptr->nnodes,
+					 buffer);
 		safe_unpack_time(&tmp_ptr->start_time, buffer);
 		safe_unpack_time(&tmp_ptr->time, buffer);
 	} else if (protocol_version >= SLURM_20_02_PROTOCOL_VERSION) {
@@ -2940,6 +2943,9 @@ _unpack_kill_job_msg(kill_job_msg_t ** msg, Buf buffer,
 			goto unpack_error;
 		safe_unpackstr_array(&tmp_ptr->spank_job_env,
 				     &tmp_ptr->spank_job_env_size, buffer);
+		safe_unpack16_array(&tmp_ptr->job_node_cpus,
+		             &tmp_ptr->nnodes,
+					 buffer);
 		safe_unpack_time(&tmp_ptr->start_time, buffer);
 		safe_unpack32(&tmp_ptr->step_id.step_id, buffer);
 		convert_old_step_id(&tmp_ptr->step_id.step_id);
@@ -2949,43 +2955,8 @@ _unpack_kill_job_msg(kill_job_msg_t ** msg, Buf buffer,
 		if (gres_plugin_job_alloc_unpack(&(tmp_ptr->job_gres_info),
 						 buffer, protocol_version))
 			goto unpack_error;
-		safe_unpack32(&(tmp_ptr->job_id),  buffer);
-		safe_unpack32(&(tmp_ptr->pack_jobid),  buffer);
-		safe_unpack32(&(tmp_ptr->job_state),  buffer);
-		safe_unpack32(&(tmp_ptr->job_uid), buffer);
-		safe_unpackstr_xmalloc(&(tmp_ptr->nodes),
-				       &uint32_tmp, buffer);
-		if (select_g_select_jobinfo_unpack(&tmp_ptr->select_jobinfo,
-						   buffer, protocol_version))
-			goto unpack_error;
-		safe_unpackstr_array(&(tmp_ptr->spank_job_env),
-				     &tmp_ptr->spank_job_env_size, buffer);
-		safe_unpack16_array(&tmp_ptr->job_node_cpus,
-		             &tmp_ptr->nnodes,
-					 buffer);
-		safe_unpack_time(&(tmp_ptr->start_time), buffer);
-		safe_unpack32(&(tmp_ptr->step_id),  buffer);
-		safe_unpack_time(&(tmp_ptr->time), buffer);
-	} else if (protocol_version >= SLURM_18_08_PROTOCOL_VERSION) {
-		safe_unpack32(&(tmp_ptr->job_id),  buffer);
-		safe_unpack32(&(tmp_ptr->pack_jobid),  buffer);
-		safe_unpack32(&(tmp_ptr->job_state),  buffer);
-		safe_unpack32(&(tmp_ptr->job_uid), buffer);
-		safe_unpackstr_xmalloc(&(tmp_ptr->nodes),
-				       &uint32_tmp, buffer);
-		if (select_g_select_jobinfo_unpack(&tmp_ptr->select_jobinfo,
-						   buffer, protocol_version))
-			goto unpack_error;
-		safe_unpackstr_array(&(tmp_ptr->spank_job_env),
-				     &tmp_ptr->spank_job_env_size, buffer);
-		safe_unpack16_array(&tmp_ptr->job_node_cpus,
-		             &tmp_ptr->nnodes,
-					 buffer);
-		safe_unpack_time(&(tmp_ptr->start_time), buffer);
-		safe_unpack32(&(tmp_ptr->step_id),  buffer);
-		safe_unpack_time(&(tmp_ptr->time), buffer);
-	} else if (protocol_version >= SLURM_MIN_PROTOCOL_VERSION) {
-		safe_unpack32(&(tmp_ptr->job_id),  buffer);
+		safe_unpack32(&(tmp_ptr->step_id.job_id),  buffer);
+		safe_unpack32(&(tmp_ptr->het_job_id),  buffer);
 		safe_unpack32(&(tmp_ptr->job_state),  buffer);
 		safe_unpack32(&(tmp_ptr->job_uid), buffer);
 		tmp_ptr->job_gid = SLURM_AUTH_NOBODY;
