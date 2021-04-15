@@ -347,7 +347,7 @@ static int _action_unknown(pam_handle_t *pamh, struct passwd *pwd, List steps)
 	 * the correct job to adopt this into. Time for drastic measures */
 	rc = _indeterminate_multiple(pamh, steps, pwd->pw_uid, &stepd);
 	if (rc == PAM_SUCCESS) {
-		info("action_unknown: Picked job %u", stepd->jobid);
+		info("action_unknown: Picked job %u", stepd->step_id.job_id);
 		if (opts.action_adopt == CALLERID_ACTION_ADOPT_AND_CHECK) {
 			if (_adopt_process(pamh, getpid(), stepd) == SLURM_SUCCESS) {
 				return PAM_SUCCESS;
@@ -472,12 +472,13 @@ static int _try_rpc(pam_handle_t *pamh, struct passwd *pwd)
 	if (rc == SLURM_SUCCESS) {
 		if (opts.action_adopt == CALLERID_ACTION_ADOPT_AND_CHECK) {
 			step_loc_t stepd;
-			memset(&stepd, 0, sizeof(step_loc_t));
-			/* We only need the jobid and stepid filled in here
+			memset(&stepd, 0, sizeof(stepd));
+		/* We only need the step_id struct needed to be filled in here
 			all the rest isn't needed for the adopt.
 			*/
-			stepd.jobid = job_id;
-			stepd.stepid = SLURM_EXTERN_CONT;
+			stepd.step_id.job_id = job_id;
+			stepd.step_id.step_id = SLURM_EXTERN_CONT;
+			stepd.step_id.step_het_comp = NO_VAL;
 
 			/* Adopt the process. If the adoption succeeds, return SUCCESS.
 			* If not, maybe the adoption failed because the user hopped
@@ -691,7 +692,7 @@ static int check_pam_service(pam_handle_t *pamh)
  *		configured)
  */
 PAM_EXTERN int _adopt_and_or_check(pam_handle_t *pamh, int flags
-				__attribute__((unused)), int argc, const char **argv) { 
+				__attribute__((unused)), int argc, const char **argv) {
 
 	int retval = PAM_IGNORE, rc = PAM_IGNORE, slurmrc, bufsize, user_jobs;
 	char *user_name;
@@ -699,8 +700,8 @@ PAM_EXTERN int _adopt_and_or_check(pam_handle_t *pamh, int flags
 	step_loc_t *stepd = NULL;
 	struct passwd pwd, *pwd_result;
 	char *buf = NULL;
-        slurm_cgroup_conf_t *cg_conf;
-	
+    slurm_cgroup_conf_t *cg_conf;
+
 	_init_opts();
 	_parse_opts(pamh, argc, argv);
 
@@ -822,7 +823,7 @@ PAM_EXTERN int _adopt_and_or_check(pam_handle_t *pamh, int flags
 		if (opts.single_job_skip_rpc) {
 			info("Connection by user %s: user has only one job %u",
 			     user_name,
-			     stepd->jobid);
+			     stepd->step_id.job_id);
 			if (opts.action_adopt == CALLERID_ACTION_ADOPT_AND_CHECK) {
 				slurmrc = _adopt_process(pamh, getpid(), stepd);
 				/* If adoption into the only job fails, it is time to
@@ -832,7 +833,7 @@ PAM_EXTERN int _adopt_and_or_check(pam_handle_t *pamh, int flags
 					(opts.action_adopt_failure ==
 					CALLERID_ACTION_ALLOW))
 					rc = PAM_SUCCESS;
-				else{
+				else {
 				  send_user_msg(pamh, "Access denied by "
 						PAM_MODULE_NAME
 					      ": failed to adopt process into cgroup, denying access because action_adopt_failure=deny");
@@ -886,7 +887,7 @@ PAM_EXTERN int pam_sm_close_session(pam_handle_t *pamh, int flags
 }
 
 
-/* Implementation for the pam_acct_mgmt API call. 
+/* Implementation for the pam_acct_mgmt API call.
  */
 PAM_EXTERN int pam_sm_acct_mgmt(pam_handle_t *pamh, int flags
 				__attribute__((unused)), int argc, const char **argv)
