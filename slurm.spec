@@ -1,6 +1,6 @@
 Name:		slurm
 Version:	20.11.3
-%define rel	1
+%global rel	1
 Release:    %{rel}.%{gittag}%{?dist}.ug
 Summary:	Slurm Workload Manager
 
