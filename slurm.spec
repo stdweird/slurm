@@ -67,14 +67,14 @@ Source:		%{slurm_source_dir}.tar.gz
 %global _hardened_ldflags "-Wl,-z,lazy"
 
 Requires: munge
-Requires: json-c12
+Requires: json-c
 
 %{?systemd_requires}
 BuildRequires: systemd
 BuildRequires: munge-devel munge-libs
 BuildRequires: python3
 BuildRequires: readline-devel
-BuildRequires: json-c12-devel
+BuildRequires: json-c-devel
 Obsoletes: slurm-lua slurm-munge slurm-plugins
 
 # fake systemd support when building rpms on other platforms

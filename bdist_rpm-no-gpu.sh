@@ -32,7 +32,7 @@ sudo yum remove -y nvidia-driver-devel cuda-nvml-dev-10-2 nvidia-driver-NVML
 sudo yum install -y ucx-devel "pmix-devel > 3.0.0" numactl-devel hwloc-devel
 
 # remove json-c12 -> use plain json-c
-sudo yum install json-c-devel
+sudo yum install json-c-devel json-c
 # also, specify python2 as python to require
 
 # glob expansion in list

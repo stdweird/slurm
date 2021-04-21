@@ -1,7 +1,7 @@
 Name:		slurm
 Version:	20.11.3
 %global rel	1
-Release:    %{rel}.%{gittag}%{?dist}.ug
+Release:    %{rel}.%{gittag}%{?dist}.nogpu.ug
 Summary:	Slurm Workload Manager
 
 Group:		System Environment/Base
