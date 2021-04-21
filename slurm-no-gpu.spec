@@ -1,7 +1,7 @@
 Name:		slurm
-Version:	19.05.7
-%global rel 3
-Release:    %{rel}.%{gittag}%{?dist}.nogpu.ug
+Version:	20.11.3
+%global rel	1
+Release:    %{rel}.%{gittag}%{?dist}.ug
 Summary:	Slurm Workload Manager
 
 Group:		System Environment/Base
@@ -20,8 +20,10 @@ Source:		%{slurm_source_dir}.tar.gz
 # build options		.rpmmacros options	change to default action
 # ====================  ====================	========================
 # --prefix		%_prefix path		install path for commands, libraries, etc.
-# --with cray		%_with_cray 1		build for a Native-Slurm Cray system
+# --with cray		%_with_cray 1		build for a Cray Aries system
 # --with cray_network	%_with_cray_network 1	build for a non-Cray system with a Cray network
+# --with cray_shasta	%_with_cray_shasta 1	build for a Cray Shasta system
+# --with slurmrestd	%_with_slurmrestd 1	build slurmrestd
 # --with slurmsmwd      %_with_slurmsmwd 1      build slurmsmwd
 # --without debug	%_without_debug 1	don't compile with debugging symbols
 # --with hdf5		%_with_hdf5 path	require hdf5 support
@@ -37,6 +39,8 @@ Source:		%{slurm_source_dir}.tar.gz
 #  Options that are off by default (enable with --with <opt>)
 %bcond_with cray
 %bcond_with cray_network
+%bcond_with cray_shasta
+%bcond_with slurmrestd
 %bcond_with slurmsmwd
 %bcond_with multiple_slurmd
 %bcond_with ucx
@@ -48,20 +52,19 @@ Source:		%{slurm_source_dir}.tar.gz
 %bcond_with hdf5
 %bcond_with lua
 %bcond_with numa
-%bcond_with x11
 %bcond_with pmix
 
 # Use debug by default on all systems
 %bcond_without debug
 
-# Build with PAM by default on linux
+# Options enabled by default
 %bcond_without pam
+%bcond_without x11
 
 # Disable hardened builds. -z,now or -z,relro breaks the plugin stack
 %undefine _hardened_build
 %global _hardened_cflags "-Wl,-z,lazy"
 %global _hardened_ldflags "-Wl,-z,lazy"
-
 
 Requires: munge
 Requires: json-c
@@ -69,7 +72,7 @@ Requires: json-c
 %{?systemd_requires}
 BuildRequires: systemd
 BuildRequires: munge-devel munge-libs
-BuildRequires: python2
+BuildRequires: python3
 BuildRequires: readline-devel
 BuildRequires: json-c-devel
 Obsoletes: slurm-lua slurm-munge slurm-plugins
@@ -130,14 +133,14 @@ BuildRequires: numactl-devel
 %endif
 %endif
 
-%if %{with pmix}
-BuildRequires: pmix-devel
-%global pmix_version %(rpm -q pmix --qf "%%{VERSION}")
+%if %{with pmix} && "%{_with_pmix}" == "--with-pmix"
+BuildRequires: pmix
+%global pmix_version %(rpm -q pmix --qf "%{VERSION}")
 %endif
 
-%if %{with ucx}
+%if %{with ucx} && "%{_with_ucx}" == "--with-ucx"
 BuildRequires: ucx-devel
-%global ucx_version %(rpm -q ucx-devel --qf "%%{VERSION}")
+%global ucx_version %(rpm -q ucx-devel --qf "%{VERSION}")
 %endif
 
 #  Allow override of sysconfdir via _slurm_sysconfdir.
@@ -225,12 +228,11 @@ to launch jobs.
 Summary: Slurm compute node daemon
 Group: System Environment/Base
 Requires: %{name}%{?_isa} = %{version}-%{release}
-%if %{with pmix}
-Requires: pmix-devel = %{pmix_version}
+%if %{with pmix} && "%{_with_pmix}" == "--with-pmix"
+Requires: pmix = %{pmix_version}
 %endif
-%if %{with ucx}
-# only the devel rpm from EPEL provides the reuqired .so files
-Requires: ucx-devel = %{ucx_version}
+%if %{with ucx} && "%{_with_ucx}" == "--with-ucx"
+Requires: ucx = %{ucx_version}
 %endif
 %description slurmd
 Slurm compute node daemon. Used to launch jobs on compute nodes
@@ -300,6 +302,21 @@ running on the node, or any user who has allocated resources on the node
 according to the Slurm
 %endif
 
+%if %{with slurmrestd}
+%package slurmrestd
+Summary: Slurm REST API translator
+Group: System Environment/Base
+Requires: %{name}%{?_isa} = %{version}-%{release}
+BuildRequires: http-parser-devel
+%if %{defined suse_version}
+BuildRequires: libjson-c-devel
+%else
+BuildRequires: json-c-devel
+%endif
+%description slurmrestd
+Provides a REST interface to Slurm.
+%endif
+
 %if %{with slurmsmwd}
 %package slurmsmwd
 Summary: support daemons and software for the Cray SMW
@@ -331,6 +348,7 @@ notifies slurm about failed nodes.
 	%{?_with_freeipmi} \
 	%{?_with_hdf5} \
 	%{?_with_shared_libslurm} \
+	%{!?_with_slurmrestd:--disable-slurmrestd} \
 	%{?_without_x11:--disable-x11} \
 	%{?_with_ucx} \
 	%{?_with_cflags}
@@ -346,7 +364,7 @@ export QA_RPATHS=0x5
 # Strip out some dependencies
 
 cat > find-requires.sh <<'EOF'
-exec %{__find_requires} "$@" | egrep -v '^libpmix.so|libevent'
+exec %{__find_requires} "$@" | egrep -v '^libpmix.so|libevent|libnvidia-ml'
 EOF
 chmod +x find-requires.sh
 %global _use_internal_dependency_generator 0
@@ -360,20 +378,19 @@ install -D -m644 etc/slurmctld.service %{buildroot}/%{_unitdir}/slurmctld.servic
 install -D -m644 etc/slurmd.service    %{buildroot}/%{_unitdir}/slurmd.service
 install -D -m644 etc/slurmdbd.service  %{buildroot}/%{_unitdir}/slurmdbd.service
 
-# in case of pmix, no conflict with pmix compat libs
-# see Cray comment below
-%if %{with pmix}
-   mkdir %{buildroot}/%{_libdir}/slurmpmi
-   mv %{buildroot}/%{_libdir}/libpmi* %{buildroot}/%{_libdir}/slurmpmi
+%if %{with slurmrestd}
+install -D -m644 etc/slurmrestd.service  %{buildroot}/%{_unitdir}/slurmrestd.service
 %endif
-
 
 # Do not package Slurm's version of libpmi on Cray systems in the usual location.
 # Cray's version of libpmi should be used. Move it elsewhere if the site still
 # wants to use it with other MPI stacks.
-%if %{with cray}
+%if %{with cray} || %{with cray_shasta}
    mkdir %{buildroot}/%{_libdir}/slurmpmi
    mv %{buildroot}/%{_libdir}/libpmi* %{buildroot}/%{_libdir}/slurmpmi
+%endif
+
+%if %{with cray}
    install -D -m644 contribs/cray/plugstack.conf.template %{buildroot}/%{_sysconfdir}/plugstack.conf.template
    install -D -m644 contribs/cray/slurm.conf.template %{buildroot}/%{_sysconfdir}/slurm.conf.template
    mkdir -p %{buildroot}/opt/modulefiles/slurm
@@ -397,12 +414,8 @@ install -D -m644 etc/slurmdbd.service  %{buildroot}/%{_unitdir}/slurmdbd.service
 %endif
 
 install -D -m644 etc/cgroup.conf.example %{buildroot}/%{_sysconfdir}/cgroup.conf.example
-install -D -m644 etc/layouts.d.power.conf.example %{buildroot}/%{_sysconfdir}/layouts.d/power.conf.example
-install -D -m644 etc/layouts.d.power_cpufreq.conf.example %{buildroot}/%{_sysconfdir}/layouts.d/power_cpufreq.conf.example
-install -D -m644 etc/layouts.d.unit.conf.example %{buildroot}/%{_sysconfdir}/layouts.d/unit.conf.example
 install -D -m644 etc/slurm.conf.example %{buildroot}/%{_sysconfdir}/slurm.conf.example
-#install -D -m755 etc/slurm.epilog.clean %{buildroot}/%{_sysconfdir}/slurm.epilog.clean
-install -D -m644 etc/slurmdbd.conf.example %{buildroot}/%{_sysconfdir}/slurmdbd.conf.example
+install -D -m600 etc/slurmdbd.conf.example %{buildroot}/%{_sysconfdir}/slurmdbd.conf.example
 install -D -m755 contribs/sjstat %{buildroot}/%{_bindir}/sjstat
 
 # Delete unpackaged files:
@@ -532,9 +545,6 @@ rm -rf %{buildroot}
 %config %{_sysconfdir}/slurm.conf.template
 %endif
 %config %{_sysconfdir}/cgroup.conf.example
-%config %{_sysconfdir}/layouts.d/power.conf.example
-%config %{_sysconfdir}/layouts.d/power_cpufreq.conf.example
-%config %{_sysconfdir}/layouts.d/unit.conf.example
 %config %{_sysconfdir}/slurm.conf.example
 #%config %{_sysconfdir}/slurm.epilog.clean
 %config %{_sysconfdir}/slurmdbd.conf.example
@@ -586,7 +596,7 @@ rm -rf %{buildroot}
 
 %files libpmi
 %defattr(-,root,root)
-%if %{with cray} || %{with pmix}
+%if %{with cray} || %{with cray_shasta}
 %{_libdir}/slurmpmi/*
 %else
 %{_libdir}/libpmi*
@@ -620,6 +630,13 @@ rm -rf %{buildroot}
 %if %{with pam}
 %files -f pam.files pam_slurm
 %defattr(-,root,root)
+%endif
+#############################################################################
+
+%if %{with slurmrestd}
+%files slurmrestd
+%{_sbindir}/slurmrestd
+%{_unitdir}/slurmrestd.service
 %endif
 #############################################################################
 
