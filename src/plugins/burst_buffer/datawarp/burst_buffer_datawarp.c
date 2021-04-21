@@ -45,7 +45,7 @@
 #include <sys/types.h>
 
 #if HAVE_JSON_C_INC
-#  include <json-c12/json.h>
+#  include <json-c/json.h>
 #elif HAVE_JSON_INC
 #  include <json/json.h>
 #endif
