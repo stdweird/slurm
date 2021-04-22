@@ -1,5 +1,5 @@
 Name:		slurm
-Version:	20.11.3
+Version:	20.11.5
 %global rel	1
 Release:    %{rel}.%{gittag}%{?dist}.nogpu.ug
 Summary:	Slurm Workload Manager
