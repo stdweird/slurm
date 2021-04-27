@@ -16,8 +16,8 @@ fi
 
 GITTAG=$(git log --format=%ct.%h -1)
 
-rm -Rf BUILD SOURCES SPECS RPMS BUILDROOT
-mkdir -p BUILD SOURCES SPECS RPMS BUILDROOT
+rm -Rf BUILD SOURCES SPECS SRPMS RPMS BUILDROOT
+mkdir -p BUILD SOURCES SPECS SRPMS RPMS BUILDROOT
 
 git archive --format=tar.gz -o "SOURCES/slurm-${SUFFIX}.tar.gz" --prefix="slurm-${SUFFIX}/" HEAD
 cp slurm.spec "SPECS"
