@@ -1,7 +1,7 @@
 Name:		slurm
 Version:	20.11.5
-%global rel	1
-Release:    %{rel}.%{gittag}%{?dist}.ug
+%define rel	1
+Release:	%{rel}%{?dist}
 Summary:	Slurm Workload Manager
 
 Group:		System Environment/Base
@@ -15,7 +15,7 @@ URL:		https://slurm.schedmd.com/
 %global slurm_source_dir %{name}-%{version}-%{rel}
 %endif
 
-Source:		%{slurm_source_dir}.tar.gz
+Source:		%{slurm_source_dir}.tar.bz2
 
 # build options		.rpmmacros options	change to default action
 # ====================  ====================	========================
@@ -67,14 +67,12 @@ Source:		%{slurm_source_dir}.tar.gz
 %global _hardened_ldflags "-Wl,-z,lazy"
 
 Requires: munge
-Requires: json-c
 
 %{?systemd_requires}
 BuildRequires: systemd
 BuildRequires: munge-devel munge-libs
 BuildRequires: python3
 BuildRequires: readline-devel
-BuildRequires: json-c-devel
 Obsoletes: slurm-lua slurm-munge slurm-plugins
 
 # fake systemd support when building rpms on other platforms
@@ -250,9 +248,7 @@ database changes to slurmctld daemons on each cluster
 Summary: Slurm\'s implementation of the pmi libraries
 Group: System Environment/Base
 Requires: %{name}%{?_isa} = %{version}-%{release}
-%if ! %{with pmix}
 Conflicts: pmix-libpmi
-%endif
 %description libpmi
 Slurm\'s version of libpmi. For systems using Slurm, this version
 is preferred over the compatibility libraries shipped by the PMIx project.
@@ -525,9 +521,6 @@ rm -rf %{buildroot}
 %{_libdir}/*.so*
 %{_libdir}/slurm/src/*
 %{_libdir}/slurm/*.so
-%if %{with cray}
-%{_libdir}/slurmpmi/*
-%endif
 %exclude %{_libdir}/slurm/accounting_storage_mysql.so
 %exclude %{_libdir}/slurm/job_submit_pbs.so
 %exclude %{_libdir}/slurm/spank_pbs.so
@@ -551,7 +544,6 @@ rm -rf %{buildroot}
 %config %{_sysconfdir}/job_submit.lua.example
 %config %{_sysconfdir}/prolog.example
 %config %{_sysconfdir}/slurm.conf.example
-#%config %{_sysconfdir}/slurm.epilog.clean
 %config %{_sysconfdir}/slurmdbd.conf.example
 %config %{_sysconfdir}/cli_filter.lua.example
 #############################################################################
@@ -611,6 +603,16 @@ rm -rf %{buildroot}
 
 %files torque
 %defattr(-,root,root)
+%{_bindir}/pbsnodes
+%{_bindir}/qalter
+%{_bindir}/qdel
+%{_bindir}/qhold
+%{_bindir}/qrerun
+%{_bindir}/qrls
+%{_bindir}/qstat
+%{_bindir}/qsub
+%{_bindir}/mpiexec
+%{_bindir}/generate_pbs_nodefile
 %{_libdir}/slurm/job_submit_pbs.so
 %{_libdir}/slurm/spank_pbs.so
 #############################################################################
